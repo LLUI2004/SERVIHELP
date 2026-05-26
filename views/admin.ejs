@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Panel del Encargado de IT - ServiHelp</title>
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+<div class="container">
+
+  <aside class="sidebar">
+    <h2 class="logo">⚡ ServiHelp</h2>
+
+    <nav>
+      <a id="nav-dashboard" class="active">
+        <i class="fa-solid fa-chart-line"></i>
+        <span>Dashboard</span>
+      </a>
+
+      <a id="nav-designar">
+        <i class="fa-solid fa-user-check"></i>
+        <span>Designar Tickets</span>
+      </a>
+      
+      <a id="nav-gestion">
+        <i class="fa-solid fa-inbox"></i>
+        <span>Crear Cuentas</span>
+      </a>
+
+      <a id="nav-analisis">
+        <i class="fa-solid fa-chart-bar"></i>
+        <span>Centro de Análisis</span>
+      </a>
+    </nav>
+
+    <div class="user-box">
+      <div class="user-info">
+        <div class="avatar">
+          <i class="fa-solid fa-user-gear"></i>
+        </div>
+        <div>
+       <p class="name" id="nombreAdmin"><%= user.username %></p>
+       <span class="role" id="rolAdmin">Administrador de IT</span>
+        </div>
+      </div>
+    </div>
+
+    <button class="btn-logout" id="logout-btn">
+      <i class="fa-solid fa-right-from-bracket"></i>
+      Salir
+    </button>
+  </aside>
+
+  <main class="main">
+
+    <section id="sec-dashboard">
+      <div>
+        <h1>Panel General del Encargado de IT</h1>
+      </div>
+
+      <div class="cards">
+        <div class="card c-pend">
+          <p>Pendientes</p> 
+          <h2 id="kpiAsignados">0</h2>
+        </div>
+
+        <div class="card c-proc">
+          <p>En Proceso</p>
+          <h2 id="kpiProceso">0</h2>
+        </div>
+
+        <div class="card c-resuel">
+          <p>Resueltos</p>
+          <h2 id="kpiResueltos">0</h2>
+        </div>
+
+        <div class="card c-cerr">
+          <p>Cerrados</p>
+          <h2 id="kpiCerrados">0</h2>
+        </div>
+      </div>
+
+      <div class="tabla-container custom-table-margin">
+        <div class="tabla-header">
+          <h3><i class="fa-solid fa-ticket"></i> Gestión de Tickets Recientes</h3>
+        </div>
+
+<div class="toolbar">
+  <div class="search-box">
+    <i class="fa-solid fa-magnifying-glass icon-search-purple"></i>
+    <input type="text" id="busqueda" class="search-input" placeholder="Buscar por asunto, fecha o usuario..." oninput="renderizarTablasDashboard()">
+  </div>
+
+  <select id="filtroEstado" class="search-input select-estado-width" onchange="renderizarTablasDashboard()">
+    <option value="todos">Todos los estados</option>
+    <option value="pendiente">Pendiente</option>
+    <option value="en proceso">En Proceso</option>
+    <option value="resuelto">Resuelto</option>
+    <option value="cerrado">Cerrado</option>
+  </select>
+
+  <select id="filtroTipo" class="search-input select-estado-width" onchange="renderizarTablasDashboard()">
+    <option value="todos">Todos los tipos</option>
+    <option value="inc">INC (Incidencia)</option>
+    <option value="req">REQ (Requerimiento)</option>
+  </select>
+
+  <select id="filtroPrioridad" class="search-input select-estado-width" onchange="renderizarTablasDashboard()">
+    <option value="todos">Todas las prioridades</option>
+    <option value="baja">Baja</option>
+    <option value="media">Media</option>
+    <option value="alta">Alta</option>
+  </select>
+</div>
+
+        <table class="tickets-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>TIPO</th>
+              <th>ASUNTO / FECHA</th>
+              <th>SOLICITANTE</th>
+              <th>PRIORIDAD</th>
+              <th>ESTADO</th>
+              <th>ASIGNADO A</th> 
+              <th>ACCIONES</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-resumen-mis-tickets"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="sec-designar" class="hidden">
+  <div class="tabla-container"> 
+    <div class="tickets-header d-flex-between">
+      <div>
+       <h1>Designar Asignación de Tickets</h1>
+        <p>Asigna un técnico calificado a los reportes entrantes</p>
+      </div>
+      
+      <div class="filter-badge-box">
+        <!-- Filtro específico para esta sección -->
+        <select id="filtro-prioridad-designar" class="select-estado-width custom-select-dark">
+          <option value="todos">Todas las prioridades</option>
+          <option value="alta">Alta</option>
+          <option value="media">Media</option>
+          <option value="baja">Baja</option>
+        </select>
+        <!-- Contador dinámico de tickets por asignar -->
+        <span class="badge pend" id="badge-contador-designar">0 tickets sin designar</span>
+      </div>
+    </div>
+
+    <!-- Contenedor dinámico donde tu JS inyectará las tarjetas usando 'disponibles-grid' -->
+    <div class="disponibles-grid" id="contenedor-cards-designar"></div>
+  </div> 
+</section>
+
+    <section id="sec-gestion" class="hidden">
+      <div class="d-flex-between">
+        <div>
+          <h1>Gestión de Personal</h1>
+        </div>
+        
+        <div class="acciones actions-no-margin">
+          <button type="button" class="btn-enviar btn-user btn-rosa" id="btn-nuevo-usuario">
+            <i class="fa-solid fa-user-plus"></i> Nueva Cuenta
+          </button>
+        </div>
+      </div>
+
+      <div id="panelTablaUsuarios" class="tabla-container custom-table-margin">
+          
+          <div class="tabla-header">
+              <h3>Administra los accesos de nuevas cuentas.</h3>
+          </div>
+
+          <div class="toolbar">
+              <div class="search-box">
+                  <i class="fa-solid fa-magnifying-glass icon-search-purple"></i>
+                  <input type="text" id="input-buscar" class="search-input" placeholder="Buscar por nombre...">
+              </div>
+              
+              <select id="filtro-rol" class="search-input select-estado-width">
+                  <option value="todos">Todos los roles</option>
+                  <option value="usuario">Usuario</option>
+                  <option value="tecnico">Técnico</option>
+                  <option value="admin">Administrador</option>
+              </select>
+          </div>
+
+          <div class="users-table-box">
+              <table class="users-table">
+                  <thead>
+                     <tr>
+            <th class="th-usuario-nombre">NOMBRE</th>
+            <th class="th-usuario-rol">ROL</th>
+            <th class="th-usuario-acciones">ACCIONES</th>
+        </tr>
+                  </thead>
+                  <tbody id="tbody-usuarios"></tbody>
+              </table>
+          </div>
+          
+      </div>
+    </section>
+
+    <section id="sec-analisis" class="hidden">
+      <div>
+        <h1>Centro de Análisis y Rendimiento</h1>
+        <p class="analisis-subtitle">Métricas en tiempo real sobre la resolución de incidentes y eficiencia del equipo.</p>
+      </div>
+
+      <div class="filtro-tecnico-container label-filter-spacing">
+        <label>Filtrar por técnico:</label>
+        <select id="select-filtro-tecnico" class="custom-select-dark" onchange="renderizarCentroAnalisis()">
+          <option value="todos">Todos los técnicos (Global)</option>
+        </select>
+      </div>
+
+      <div class="cards cards-analisis-grid">
+        <div class="card card-border-asignado">
+          <p>Asignados</p>
+          <h2 id="kpiAsignados-analisis">0</h2>
+        </div>
+        <div class="card card-border-proceso">
+          <p>En Proceso</p>
+          <h2 id="kpiProceso-analisis">0</h2>
+        </div>
+        <div class="card card-border-resuelto">
+          <p>Resueltos</p>
+          <h2 id="kpiResueltos-analisis">0</h2>
+        </div>
+        <div class="card card-border-cerrado">
+          <p>Cerrados</p>
+          <h2 id="kpiCerrados-analisis">0</h2>
+        </div>
+      </div>
+
+      <div class="grid-2 analysis-charts-spacing">
+        <div class="users-table-box text-centered">
+          <h3 class="chart-title"><i class="fa-solid fa-chart-pie"></i> Distribución por Estado</h3>
+          <div class="chart-canvas-wrapper">
+            <canvas id="chartEstados"></canvas>
+          </div>
+        </div>
+
+        <div class="users-table-box text-centered">
+          <h3 class="chart-title"><i class="fa-solid fa-chart-bar"></i> Rendimiento por Estado</h3>
+          <div class="chart-canvas-wrapper">
+            <canvas id="chartPrioridades"></canvas>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<div id="modal-ticket-tecnico" class="modal">
+  <div class="modal-content">
+    <span class="close-modal" id="close-modal-ticket-x">&times;</span>
+    <h3 id="m-id-ticket" class="modal-title-purple">Detalle del Ticket</h3>
+    <hr class="modal-divider">
+    
+    <div class="input-group">
+      <label><strong>Descripción del Reporte:</strong></label>
+      <p id="m-descripcion-ticket" class="faq-respuesta-contenido"></p>
+    </div>
+
+    <div class="input-group">
+      <label><strong>Evidencia Adjunta:</strong></label>
+      <div id="m-evidencia-contenedor"></div>
+    </div>
+
+    <div class="acciones modal-footer-line">
+      <button id="btn-cerrar-modal-tecnico-footer" class="btn-cancelar">Cerrar Ventana</button>
+    </div>
+  </div>
+</div>
+
+<div id="modal-nuevo-usuario" class="modal">
+  <div class="modal-content modal-content-user-width">
+    <span class="close-modal" id="close-modal-user">&times;</span>
+    <h3 class="modal-title-purple"><i class="fa-solid fa-user-plus"></i> Añade la cuenta</h3>
+    <hr class="modal-divider">
+    
+    <form id="form-registro-usuario">
+      <div class="input-group">
+        <label>Nombre de Usuario (Login):</label>
+        <input type="text" id="reg-username" placeholder="Ej. cmendoza" required>
+      </div>
+      <div class="input-group">
+        <label>Contraseña:</label>
+        <input type="password" id="reg-password" placeholder="••••••••" required>
+      </div>
+    
+      <div class="input-group">
+  <label for="reg-rol">Rol de la Cuenta:</label>
+  <select 
+    id="reg-rol" 
+    name="rol" 
+    class="custom-select-dark select-full-width" 
+    required>
+    <option value="" disabled selected>-- Selecciona un Rol --</option>
+    <option value="usuario">Usuario Común</option>
+    <option value="tecnico">Técnico</option>
+    <option value="admin">Administrador de IT</option>
+  </select>
+</div>
+
+      <div class="acciones modal-footer-line">
+        <button type="button" class="btn-cancelar" id="btn-cancelar-user">Cancelar</button>
+        <button type="submit" class="btn-enviar">Guardar Usuario</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="/admin-app.js"></script>
+</body>
+</html>

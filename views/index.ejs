@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <title>ServiHelp - Acceso</title>
+  <%- include('partials/head') %>
+</head>
+<body class="login-body">
+
+  <div class="login-card">
+    <h2 class="logo-login">⚡ ServiHelp</h2>
+    <p id="form-title">Inicia sesión para continuar</p>
+    
+    <form id="auth-form">
+      <input type="text" id="username" placeholder="Nombre de usuario" required minlength="4">
+      <input type="password" id="password" placeholder="Contraseña" required minlength="4">
+      <button type="submit" id="btn-text" class="btn-main">Ingresar</button>
+    </form>
+
+    <div style="margin-top: 15px;">
+      <span id="toggle-text">¿No tienes cuenta?</span> 
+      <span class="toggle-link" id="change-mode">Regístrate aquí</span>
+    </div>
+    
+    <span id="msg"></span>
+  </div>
+
+  <script src="/auth.js"></script>
+</body>
+</html>

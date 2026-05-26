@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <title>Panel de Usuario - ServiHelp</title>
+  <%- include('partials/head') %>
+</head>
+<body>
+
+<div id="modalTicket" class="modal">
+  <div class="modal-content">
+    <h3 id="mTitulo">Detalle del Ticket</h3>
+    <hr class="modal-divider">
+    <div class="modal-body">
+      <p><strong>Descripción:</strong></p>
+      <p id="mDescripcion"></p>
+      <p><strong>Evidencia:</strong></p>
+      <div id="mImagen"></div>
+    </div>
+
+    <div class="acciones" id="acciones-modal-footer">
+      <button type="button" class="btn-aprobar" id="btn-aprobar" style="background-color: #28a745; color: white;">Aprobar</button>
+      <button type="button" class="btn-rechazar" id="btn-rechazar" style="background-color: #dc3545; color: white;">Rechazar</button>
+      <button type="button" class="btn-cancelar" id="btn-cerrar-modal">Cerrar Ventana</button>
+    </div>
+  </div> 
+</div>
+
+<div class="container">
+  <aside class="sidebar">
+    <h2 class="logo">⚡ ServiHelp</h2>
+    <nav>
+      <a id="nav-inicio" class="active"><i class="fa-solid fa-house"></i> Inicio</a>
+      <a id="nav-formulario"><i class="fa-solid fa-plus"></i> Crear Ticket</a>
+      <a id="nav-perfil"><i class="fa-solid fa-user-gear"></i> Mi Perfil</a>
+      <a id="nav-ayuda"><i class="fa-solid fa-circle-question"></i> Ayuda / FAQ</a>
+    </nav>
+    
+    <div class="user-box">
+      <div class="user-info">
+        <div class="avatar" id="sidebarAvatar"><i class="fa-solid <%= user.avatar || 'fa-user' %>"></i></div>
+        <div>
+          <p class="name"><%= user.username %></p>
+          <span class="role">Usuario</span>
+        </div>
+      </div>
+      <button id="logout-btn" class="btn-logout"><i class="fa-solid fa-right-from-bracket"></i> Salir</button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <section id="inicio">
+  <h1>Panel General de Usuario</h1>
+<div class="cards">
+    <div class="card c-pend"><p>Pendientes</p><h2 id="cPend">0</h2></div>
+    <div class="card c-proc"><p>En Proceso</p><h2 id="cProc">0</h2></div>
+    <div class="card c-resuel"><p>Resueltos</p><h2 id="cRes">0</h2></div> 
+    <div class="card c-cerr"><p>Cerrados</p><h2 id="cCer">0</h2></div>
+</div>
+
+      <div class="tabla-container">
+        <h3>Mis Reportes Recientes</h3>
+        <div class="toolbar">
+          <div class="search-box">
+            <i class="fa-solid fa-magnifying-glass icon-search-purple"></i>
+       <input type="text" id="busqueda" class="search-input" placeholder="Buscar por asunto o fecha.">
+          </div>
+          <select id="filtroEstado" class="search-input select-estado-width">
+            <option value="Todos">Todos los estados</option>
+            <option value="Pendiente">Pendiente</option>
+            <option value="En Proceso">En Proceso</option>
+            <option value="Resuelto">Resuelto</option> 
+            <option value="Cerrado">Cerrado</option>
+          </select>
+          <select id="filtroTipo" class="search-input select-estado-width">
+            <option value="Todos">Todos los tipos</option>
+            <option value="INC">INC (Incidencia)</option>
+            <option value="REQ">REQ (Requerimiento)</option>
+          </select>
+          <select id="filtroPrioridad" class="search-input select-estado-width">
+            <option value="Todos">Todas las prioridades</option>
+            <option value="Baja">Baja</option>
+            <option value="Media">Media</option>
+            <option value="Alta">Alta</option>
+          </select>
+        </div>
+
+        <table>
+          <thead>
+            <tr><th>ID</th><th>Fecha de Creación</th><th>Tipo</th><th>Asunto</th><th>Prioridad</th><th>Estado</th><th>Acciones</th></tr>
+          </thead>
+          <tbody id="listaTickets"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="formulario" class="hidden">
+      <div class="ticket-box">
+        <h3>Nuevo Reporte de Incidencia</h3>
+        <form id="formTicket" enctype="multipart/form-data">
+          <div class="grid-2">
+            <div class="input-group"><label>Asunto / Título</label><input type="text" id="titulo" name="titulo" required placeholder="Ej: Falla de internet en oficina 3"></div>
+            <div class="input-group"><label>Área</label>
+
+              <select id="area" name="id_area">
+    <option value="1">Sistemas</option>
+    <option value="2">Soporte Técnico</option>
+    <option value="3">Redes</option>
+  </select>
+          </div>
+          </div>
+          <div class="grid-2">
+            <div class="input-group"><label>Prioridad</label><select id="prioridad" name="prioridad"><option value="Alta">Alta</option><option value="Media" selected>Media</option><option value="Baja">Baja</option></select></div>
+            <div class="input-group"><label>Usuario</label><input type="text" value="<%= user.username %>" disabled></div>
+          </div>
+          <label>Descripción</label>
+          <textarea id="descripcion" name="descripcion" rows="4" placeholder="Describe detalladamente el problema para ayudarte más rápido..."></textarea>
+          <label>Evidencia</label>
+          <label class="upload-box" for="archivo">
+            <input type="file" id="archivo" name="archivo" hidden>
+            <i id="iconoNube" class="fa-solid fa-cloud-arrow-up fa-2xl cloud-icon-purple"></i>
+            <span id="nArchivo">Haz clic para subir archivo</span>
+          </label>
+          <div class="acciones">
+            <button type="button" class="btn-cancelar" id="btn-cancelar-ticket">Cancelar</button>
+            <button type="submit" class="btn-enviar">Enviar Ticket</button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <section id="perfil" class="hidden">
+      <div class="ticket-box">
+        <h3>Mi Perfil de Usuario</h3>
+        <p class="profile-subtitle">Personaliza el icono de tu cuenta de acceso rápido.</p>
+        <form id="formPerfil">
+          <div class="grid-2">
+            <div class="input-group"><label>Nombre de Usuario</label><input type="text" value="<%= user.username %>" disabled></div>
+            <div class="input-group"><label>Rol asignado</label><input type="text" value="<%= user.role %>" disabled></div>
+          </div>
+          <label class="avatar-title">Selecciona tu nuevo Avatar</label>
+          <div class="avatar-selection-grid">
+            <div class="avatar-option selected" data-avatar="fa-user"><i class="fa-solid fa-user"></i></div>
+            <div class="avatar-option" data-avatar="fa-user-astronaut"><i class="fa-solid fa-user-astronaut"></i></div>
+            <div class="avatar-option" data-avatar="fa-user-ninja"><i class="fa-solid fa-user-ninja"></i></div>
+            <div class="avatar-option" data-avatar="fa-user-secret"><i class="fa-solid fa-user-secret"></i></div>
+            <div class="avatar-option" data-avatar="fa-laptop-code"><i class="fa-solid fa-laptop-code"></i></div>
+          </div>
+          <div id="perfilAvatarActual"><i class="fa-solid <%= user.avatar || 'fa-user' %>"></i></div>
+          <div class="acciones">
+            <button type="button" class="btn-cancelar" id="btn-cancelar-perfil">Volver al Inicio</button>
+            <button type="submit" class="btn-enviar">Guardar Cambios</button>
+          </div>
+        </form>
+
+        <div class="notificaciones-container">
+          <h4 class="notif-title"><i class="fa-solid fa-bell"></i> Mensajes e Historial del Técnico</h4>
+          <div id="listaNotificaciones">
+            <div class="notificacion-item">
+              <div class="notif-icono"><i class="fa-solid fa-screwdriver-wrench"></i></div>
+              <div class="notif-contenido">
+                <strong class="notif-item-title">Soporte Técnico asignó tu caso</strong>
+                <p>El técnico Juan Pérez cambió el estado de tu reporte #1001 a "En Proceso".</p>
+                <span>Hace 10 minutos</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="ayuda" class="hidden">
+            <div class="ticket-box faq-box-width">
+        <h3>Centro de Ayuda y Preguntas Frecuentes</h3>
+        <p class="profile-subtitle">Consulta esta guía rápida para asegurarte de levantar tus incidencias de forma correcta.</p>
+
+        <div class="faq-container">
+          
+          <div class="faq-item">
+            <button class="faq-pregunta">
+              ¿Cómo debo redactar el título o asunto al crear un ticket?
+              <i class="fa-solid fa-chevron-down"></i>
+            </button>
+            <div class="faq-respuesta">
+              <div class="faq-content-padding faq-respuesta-contenido">
+                Es recomendable usar un <strong>título corto, claro y descriptivo</strong>. Evita títulos genéricos como "No funciona" o "Ayuda". Es mucho mejor escribir un resumen directo como <em>"Impresora de contabilidad no jala papel"</em> or <em>"Sin acceso a internet en oficina central"</em>. Esto ayuda al técnico a saber qué herramientas llevar antes de ir a revisarlo.
+              </div>
+            </div>
+          </div>
+
+          <div class="faq-item">
+            <button class="faq-pregunta">
+              ¿Qué área debo seleccionar según mi problema?
+              <i class="fa-solid fa-chevron-down"></i>
+            </button>
+            <div class="faq-respuesta">
+              <div class="faq-respuesta-contenido">
+                Clasificar tu problema adecuadamente acelera el tiempo de respuesta:
+                <ul>
+                  <li><strong>Soporte Técnico:</strong> Problemas físicos o de hardware (pantallas, cables rotos, computadoras que no encienden, periféricos, mouse, etc.).</li>
+                  <li><strong>Redes:</strong> Todo lo relacionado a conectividad (fallas de WiFi, falta de red local, cables de internet desconectados).</li>
+                  <li><strong>Sistemas:</strong> Errores con softwares específicos de la empresa, contraseñas bloqueadas de sistemas internos o instalación de paqueterías.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <div class="faq-item">
+            <button class="faq-pregunta">
+              ¿Cómo determinar la prioridad correcta de forma honesta?
+              <i class="fa-solid fa-chevron-down"></i>
+            </button>
+            <div class="faq-respuesta">
+              <div class="faq-respuesta-contenido">
+                Pedimos honestidad al asignar prioridades para no saturar al equipo de IT. Guíate bajo estos criterios estándar de ingeniería:
+                <ul>
+                  <li><strong>Baja:</strong> El problema no afecta tus labores diarias (ej: cambiar el icono de perfil, duda de uso, un pixel muerto secundario).</li>
+                  <li><strong>Media:</strong> Tienes una falla pero puedes seguir trabajando usando alternativas (ej: una impresora no funciona pero puedes mandar a la de la oficina de al lado).</li>
+                  <li><strong>Alta:</strong> Tu trabajo está completamente detenido o afecta a toda una sección (ej: el servidor se cayó, tu computadora no enciende para nada, un fallo de luz en el área).</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <div class="faq-item">
+            <button class="faq-pregunta">
+              ¿Para qué sirve la sección de "Inicio"?
+              <i class="fa-solid fa-chevron-down"></i>
+            </button>
+            <div class="faq-respuesta">
+              <div class="faq-respuesta-contenido">
+                La sección de <strong>Inicio</strong> es tu tablero de control personal. Ahí puedes ver en tiempo real cuántos reportes tienes abiertos, cuántos están bajo revisión en proceso y los ya solucionados por los ingenieros. Además, incluye herramientas de filtrado rápido para buscar tickets anteriores por palabras clave o estados.
+              </div>
+            </div>
+          </div>
+
+          <div class="faq-item">
+            <button class="faq-pregunta">
+              ¿Para qué sirve la sección de "Mi Perfil"?
+              <i class="fa-solid fa-chevron-down"></i>
+            </button>
+            <div class="faq-respuesta">
+              <div class="faq-respuesta-contenido">
+                En <strong>Mi Perfil</strong> puedes verificar tus datos base de registro y personalizar tu avatar para que se vea reflejado en el sistema. Además, incluye el <strong>Buzón de Notificaciones</strong>, un canal directo donde aparecerán las alertas automáticas y comentarios que los técnicos de soporte realicen sobre tus reportes activos.
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+  window.currentUserSessionName = "<%= user.username %>";
+  document.getElementById('archivo').addEventListener('change', function() {
+    const fileName = this.files[0] ? this.files[0].name : 'Haz clic para subir archivo';
+    document.getElementById('nArchivo').innerText = fileName;
+    if(this.files[0]) document.getElementById('iconoNube').className = "fa-solid fa-file-check fa-2xl cloud-icon-purple";
+  });
+</script>
+<script src="/usuario-app.js"></script>
+</body>
+</html>

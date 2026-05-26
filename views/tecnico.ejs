@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Panel del Técnico - ServiHelp</title>
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+</head>
+<body>
+
+<div class="container">
+
+  <aside class="sidebar">
+    <h2 class="logo">⚡ ServiHelp</h2>
+
+    <nav>
+      <a id="nav-dashboard" class="active">
+        <i class="fa-solid fa-chart-line"></i>
+        <span>Dashboard</span>
+      </a>
+      
+      <a id="nav-disponibles">
+        <i class="fa-solid fa-inbox"></i>
+        <span>Disponibles</span>
+      </a>
+    </nav>
+
+    <div class="user-box">
+      <div class="user-info">
+        <div class="avatar">
+          <i class="fa-solid fa-user-gear"></i>
+        </div>
+        <div>
+          <p class="name" id="nombreTecnico"><%= user.username %></p>
+          <span class="role" id="rolTecnico">Técnico</span>
+        </div>
+      </div>
+    </div>
+
+    <button class="btn-logout" id="logout-btn">
+      <i class="fa-solid fa-right-from-bracket"></i>
+      Salir
+    </button>
+  </aside>
+
+  <main class="main">
+
+    <section id="sec-dashboard">
+      <div>
+        <h1>Panel General de Soporte</h1>
+      </div>
+
+      <div class="cards">
+        <div class="card c-pend">
+          <p>Asignados</p>
+          <h2 id="kpiAsignados">0</h2>
+        </div>
+        <div class="card c-proc">
+          <p>En Proceso</p>
+          <h2 id="kpiProceso">0</h2>
+        </div>
+        <div class="card c-resuel">
+          <p>Resueltos</p>
+          <h2 id="kpiResueltos">0</h2>
+        </div>
+      </div>
+
+      <div class="tabla-container custom-table-margin">
+        <div class="tabla-header">
+          <h3>Control de Tickets Asignados</h3>
+        </div>
+
+     <div class="toolbar">
+  <div class="search-box">
+    <i class="fa-solid fa-magnifying-glass icon-search-purple"></i>
+    <input type="text" id="busqueda" class="search-input" placeholder="Buscar..." oninput="renderizarTablasDashboard()">
+  </div>
+
+  <select id="filtroEstado" class="search-input select-estado-width" onchange="renderizarTablasDashboard()">
+    <option value="Todos">Todos los estados</option>
+    <option value="En Proceso">En Proceso</option>
+    <option value="Resuelto">Resuelto</option>
+    <option value="Cerrado">Cerrado</option>
+  </select>
+
+  <select id="filtroTipo" class="search-input select-estado-width" onchange="renderizarTablasDashboard()">
+    <option value="Todos">Todos los tipos</option>
+    <option value="INC">INC (Incidencia)</option>
+    <option value="REQ">REQ (Requerimiento)</option>
+  </select>
+
+  <select id="filtroPrioridad" class="search-input select-estado-width" onchange="renderizarTablasDashboard()">
+    <option value="Todos">Todas las prioridades</option>
+    <option value="Baja">Baja</option>
+    <option value="Media">Media</option>
+    <option value="Alta">Alta</option>
+  </select>
+</div>
+
+        <table class="tickets-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>TIPO</th>
+              <th>ASUNTO / FECHA</th>
+              <th>SOLICITANTE</th>
+              <th>PRIORIDAD</th>
+              <th>ESTADO</th>
+              <th>ACCIONES</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-resumen-mis-tickets"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="sec-disponibles" class="hidden">
+      <div class="tabla-container"> 
+        <div class="tickets-header d-flex-between">
+          <div>
+            <h1>Tickets Disponibles</h1>
+            <p>Tickets sin asignar en el sistema</p>
+          </div>
+          
+          <div class="filter-badge-box">
+            <select id="filtro-prioridad-disponibles" class="select-estado-width custom-select-dark">
+              <option value="todos">Todas las prioridades</option>
+              <option value="alta">Alta</option>
+              <option value="media">Media</option>
+              <option value="baja">Baja</option>
+            </select>
+           <span class="badge pend" id="badge-contador-disponibles">0 tickets en asignación</span>
+          </div>
+        </div>
+
+        <div class="disponibles-grid" id="contenedor-cards-disponibles"></div>
+      </div> 
+    </section>
+
+  </main>
+</div>
+
+<div id="modal-ticket-tecnico" class="modal">
+  <div class="modal-content">
+    <h3 id="m-id-ticket">Detalle del Ticket</h3>
+    <hr class="modal-divider">
+    
+    <div class="input-group">
+      <label><strong>Descripción del Reporte:</strong></label>
+      <p id="m-descripcion-ticket" class="faq-respuesta-contenido"></p>
+    </div>
+
+    <div class="input-group">
+      <label><strong>Evidencia Adjunta:</strong></label>
+      <div id="m-evidencia-contenedor"></div>
+    </div>
+
+    <div class="acciones modal-footer-line" id="modal-ticket-tecnico-footer">
+      <button id="btn-cerrar-modal-tecnico-footer" class="btn-cancelar">Cerrar Ventana</button>
+    </div>
+  </div>
+</div>
+
+<script>
+    window.currentUserId = "<%= user.id %>"; 
+    window.currentUserSessionName = "<%= user.username %>";
+</script>
+<script src="/tecnico-app.js"></script>
+</body>
+</html>
