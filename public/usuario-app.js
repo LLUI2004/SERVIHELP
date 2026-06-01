@@ -1,321 +1,361 @@
 document.addEventListener("DOMContentLoaded", () => {
-    let ticketsData = []; 
-    let avatarSeleccionadoTemporal = "fa-user"; 
+  let ticketsData = [];
+  let avatarSeleccionadoTemporal = "fa-user";
+  let ticketEditando = null;
+  let uploadPreviewUrls = [];
 
-    // =========================================================================
-    // 0. FUNCIÓN MAESTRA DE SINCRONIZACIÓN
-    // =========================================================================
-    // Actualiza tu función refrescarDatos en usuario-app.js
-async function refrescarDatos() {
+const $ = id => document.getElementById(id);
+  const detail = window.ServiHelpTicketDetail;
+  const swalEstilo = {
+    buttonsStyling: false,
+    customClass: {
+      popup: "mi-swal-popup",
+      confirmButton: "btn-enviar",
+      cancelButton: "btn-cancelar",
+      textarea: "mi-swal-textarea",
+      input: "mi-swal-input"
+    }
+  };
+  const themedSwal = opts => Swal.fire({
+    ...swalEstilo,
+    ...opts,
+    customClass: { ...swalEstilo.customClass, ...(opts.customClass || {}) }
+  });
+  const toast = (icon, title) => window.Swal
+    ? themedSwal({ icon, title, timer: 1800, showConfirmButton: false })
+    : alert(title);
+  const ask = (opts) => window.Swal ? themedSwal(opts) : Promise.resolve({
+    isConfirmed: confirm(opts.title || opts.text || "Confirmar"),
+    value: opts.input ? prompt(opts.inputLabel || opts.title || "") : true
+  });
+  const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, c => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  }[c]));
+  const urlArchivo = archivo => archivo?.startsWith("/uploads/") ? archivo : `/uploads/${archivo}`;
+
+  function limpiarPreviewCarga() {
+    uploadPreviewUrls.forEach(url => URL.revokeObjectURL(url));
+    uploadPreviewUrls = [];
+    const preview = $("preview-evidencias");
+    if (preview) preview.innerHTML = "";
+  }
+
+  function renderPreviewCarga() {
+    limpiarPreviewCarga();
+    const input = $("archivo");
+    const preview = $("preview-evidencias");
+    if (!input || !preview || input.files.length === 0) return;
+    uploadPreviewUrls = [...input.files].slice(0, 5).map(file => URL.createObjectURL(file));
+    detail.renderCarousel(preview, uploadPreviewUrls, "Selecciona imagenes para previsualizar.");
+  }
+
+  async function refrescarDatos() {
     try {
-        const res = await fetch('/api/tickets');
-        if (!res.ok) throw new Error('Error al conectar');
-        ticketsData = await res.json();
-        
-        // En lugar de renderizar todo, llamamos a la función que ya gestiona filtros
-        aplicarFiltros(); 
-        
-        console.log("Datos sincronizados y filtrados:");
-    } catch (err) { console.error(err); }
-}
-
-    // =========================================================================
-    // 1. VINCULACIÓN SEMÁNTICA DE EVENTOS
-    // =========================================================================
-    document.getElementById('nav-inicio').addEventListener('click', mostrarInicio);
-    document.getElementById('nav-formulario').addEventListener('click', mostrarFormulario);
-    document.getElementById('nav-perfil').addEventListener('click', mostrarPerfil);
-    document.getElementById('nav-ayuda').addEventListener('click', mostrarAyuda);
-    
-    document.getElementById('formPerfil').addEventListener('submit', guardarPerfil);
-    document.getElementById('btn-cancelar-ticket').addEventListener('click', mostrarInicio);
-    document.getElementById('btn-cancelar-perfil').addEventListener('click', mostrarInicio);
-    
-    document.getElementById('logout-btn').addEventListener('click', async () => {
-        const res = await fetch('/logout', { method: 'POST' });
-        if (res.ok) window.location.href = '/';
-    });
-
-    // =========================================================================
-    // 2. CREAR TICKET (Lógica Completa)
-    // =========================================================================
-    document.getElementById('formTicket').addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const formData = new FormData(e.target);
-        try {
-            const response = await fetch('/api/tickets', { method: 'POST', body: formData });
-            if (response.ok) {
-                alert('Ticket creado exitosamente');
-                document.getElementById('formTicket').reset();
-                document.getElementById('nArchivo').innerText = 'Haz clic para subir archivo';
-                document.getElementById('iconoNube').className = "fa-solid fa-cloud-arrow-up fa-2xl cloud-icon-purple";
-                await refrescarDatos();
-                mostrarInicio();
-            } else {
-                const errorData = await response.json();
-                alert('Error al crear el ticket: ' + (errorData.error || ''));
-            }
-        } catch (error) { console.error('Error:', error); }
-    });
-
-    // =========================================================================
-    // 3. RENDERIZADO Y LÓGICA DE TABLA
-    // =========================================================================
-    async function mostrarInicio() {
-        ocultarTodasLasSecciones();
-        document.getElementById('inicio').classList.remove('hidden');
-        document.getElementById('nav-inicio').classList.add('active');
-        await refrescarDatos();
+      const res = await fetch("/api/tickets");
+      if (!res.ok) throw new Error("Error al conectar");
+      ticketsData = await res.json();
+      aplicarFiltros();
+    } catch (err) {
+      console.error(err);
+      toast("error", "No se pudieron cargar los tickets");
     }
+  }
 
-function renderizarTabla(data) {
-    const tbody = document.getElementById('listaTickets');
-    if (!tbody) return;
-    tbody.innerHTML = '';
+  function ocultarTodasLasSecciones() {
+    ["inicio", "formulario", "perfil", "ayuda"].forEach(id => $(id)?.classList.add("hidden"));
+    ["nav-inicio", "nav-formulario", "nav-perfil", "nav-ayuda"].forEach(id => $(id)?.classList.remove("active"));
+  }
 
-   let contadores = { pendientes: 0, proceso: 0, resueltos: 0, cerrados: 0 };
+  async function mostrarInicio() {
+    ocultarTodasLasSecciones();
+    $("inicio")?.classList.remove("hidden");
+    $("nav-inicio")?.classList.add("active");
+    await refrescarDatos();
+  }
 
-    data.forEach((t) => {
-        // Normalización
-        const est = (t.estado || '').toLowerCase().trim();
-        const prio = (t.prioridad || '').toLowerCase().trim();
-        
-        const badgeClase = est === 'en proceso' ? 'proc' : (est === 'cerrado' ? 'cerr' : (est === 'resuelto' ? 'resuel' : 'pend'));
-        const icon = est === 'en proceso' ? 'fa-spinner fa-spin' : (est === 'resuelto' ? 'fa-circle-check' : (est === 'cerrado' ? 'fa-lock' : 'fa-circle-dot'));
-        
-        const tipoAutomatico = (prio === 'alta') ? 'INC' : 'REQ';
-        const claseTipo = (tipoAutomatico === 'INC') ? 'inc' : 'req';
+  function mostrarFormulario(ticket = null) {
+    ocultarTodasLasSecciones();
+    $("formulario")?.classList.remove("hidden");
+    $("nav-formulario")?.classList.add("active");
+    ticketEditando = ticket;
+    $("formTicket").reset();
+    limpiarPreviewCarga();
+    $("titulo").value = ticket?.titulo || "";
+    $("descripcion").value = ticket?.descripcion || "";
+    $("formulario").querySelector("h3").innerText = ticket ? `Editar Ticket #${ticket.id_ticket}` : "Nuevo Reporte de Incidencia";
+    $("formTicket").querySelector(".btn-enviar").innerText = ticket ? "Guardar Cambios" : "Enviar Ticket";
+    $("nArchivo").innerText = ticket ? "Sube nuevas imágenes para reemplazar las anteriores" : "Maximo 5 imágenes";
+  }
 
-        // Lógica de contadores
-       // Lógica de contadores
-if (est === 'pendiente' || est === 'pendiente_asignacion') {
-    contadores.pendientes++;
-} else if (est === 'en proceso') {
-    contadores.proceso++;
-} else if (est === 'resuelto') {
-    contadores.resueltos++; // Ahora suma a resueltos específicamente
-} else if (est === 'cerrado') {
-    contadores.cerrados++; // Ahora solo suma si es realmente 'cerrado'
-}
+  function mostrarPerfil() {
+    ocultarTodasLasSecciones();
+    $("perfil")?.classList.remove("hidden");
+    $("nav-perfil")?.classList.add("active");
+  }
 
-        const esResuelto = est === 'resuelto' || est === 'Resuelto';
+  function mostrarAyuda() {
+    ocultarTodasLasSecciones();
+    $("ayuda")?.classList.remove("hidden");
+    $("nav-ayuda")?.classList.add("active");
+  }
 
-        const tr = document.createElement('tr');
-        // NOTA: Quité el onclick de aquí
-        tr.innerHTML = `
-            <td>#${t.id_ticket}</td>
-            <td>${new Date(t.fecha_creacion).toLocaleDateString()}</td>
-            <td><span class="tag-ticket ${claseTipo}">${tipoAutomatico}</span></td>
-            <td>${t.titulo}</td>
-            <td><span class="badge ${prio}">${t.prioridad.toUpperCase()}</span></td>
-            <td><span class="badge ${badgeClase}"><i class="fa-solid ${icon}"></i> ${t.estado}</span></td>
-            <td class="acciones-cell">
-                <div style="display: flex; gap: 5px; justify-content: flex-end;">
-                    <button class="btn-ver" data-id="${t.id_ticket}"><i class="fa-solid fa-eye"></i></button>
-                </div>
-            </td>
-        `;
+  $("nav-inicio")?.addEventListener("click", mostrarInicio);
+  $("nav-formulario")?.addEventListener("click", () => mostrarFormulario());
+  $("nav-perfil")?.addEventListener("click", mostrarPerfil);
+  $("nav-ayuda")?.addEventListener("click", mostrarAyuda);
+  $("btn-cancelar-ticket")?.addEventListener("click", mostrarInicio);
+  $("btn-cancelar-perfil")?.addEventListener("click", mostrarInicio);
+  $("logout-btn")?.addEventListener("click", async () => {
+    const res = await fetch("/logout", { method: "POST" });
+    if (res.ok) window.location.href = "/";
+  });
+  $("archivo")?.addEventListener("change", renderPreviewCarga);
+  $("btn-evidencias")?.addEventListener("click", () => {
+    console.log("Botón presionado");
+    $("archivo").click();
+  });
+  detail?.initNotificationBell?.();
 
-        // Lógica de botones de Aprobar/Rechazar (asignados mediante addEventListener)
-        if (esResuelto) {
-            const contenedorAcciones = tr.querySelector('.acciones-cell div');
-            
-            const btnAprobar = document.createElement('button');
-            btnAprobar.className = 'btn-aprobar';
-            btnAprobar.innerHTML = '<i class="fa-solid fa-check"></i>';
-            btnAprobar.title = 'Aprobar Solución';
-            btnAprobar.addEventListener('click', () => cambiarEstadoTicket(t.id_ticket, 'aprobar'));
-            
-            const btnRechazar = document.createElement('button');
-            btnRechazar.className = 'btn-rechazar';
-            btnRechazar.innerHTML = '<i class="fa-solid fa-xmark"></i>';
-            btnRechazar.title = 'Rechazar Solución';
-            btnRechazar.addEventListener('click', () => cambiarEstadoTicket(t.id_ticket, 'rechazar'));
 
-            contenedorAcciones.appendChild(btnAprobar);
-            contenedorAcciones.appendChild(btnRechazar);
-        }
-
-        // Evento para el botón de ver
-        tr.querySelector('.btn-ver').addEventListener('click', () => verDetalle(t.id_ticket));
-        tbody.appendChild(tr);
-    });
-
-    // Actualizar contadores
-    if (document.getElementById('cPend')) document.getElementById('cPend').innerText = contadores.pendientes;
-    if (document.getElementById('cProc')) document.getElementById('cProc').innerText = contadores.proceso;
-    if (document.getElementById('cRes')) document.getElementById('cRes').innerText = contadores.resueltos; // ¡AQUÍ ESTÁ LA CLAVE!
-    if (document.getElementById('cCer')) document.getElementById('cCer').innerText = contadores.cerrados;
-}
-    // =========================================================================
-    // 4. FUNCIONES DE PERFIL, DETALLE Y LÓGICA DE ESTADOS
-    // =========================================================================
-async function verDetalle(ticketId) {
+  $("formTicket")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
     try {
-        const res = await fetch(`/api/tickets/${ticketId}`);
-        const t = await res.json();
-        
-        // 1. Rellenar textos
-        document.getElementById('mTitulo').innerText = `Detalle del Ticket: #${t.id_ticket}`;
-        document.getElementById('mDescripcion').innerText = t.descripcion || "Sin descripción.";
-        
-        // 2. Lógica de Imagen con estilo uniforme
-        const contenedorImagen = document.getElementById('mImagen');
-        // Limpiamos contenido previo
-        contenedorImagen.innerHTML = ''; 
-        contenedorImagen.style.marginTop = "10px";
-        
-        if (t.archivo) {
-            const rutaImagen = t.archivo.startsWith('/uploads/') ? t.archivo : `/uploads/${t.archivo}`;
-            contenedorImagen.innerHTML = `<img src="${rutaImagen}" style="max-width: 100%; border-radius: 8px; cursor: pointer; display: block;" alt="Evidencia">`;
-            contenedorImagen.onclick = () => window.open(rutaImagen, '_blank');
-        } else {
-            contenedorImagen.innerHTML = `<p style="color: #6c757d; font-style: italic; background: #25263a; padding: 10px; border-radius: 5px;">No se subió evidencia para este reporte.</p>`;
-            contenedorImagen.onclick = null;
-        }
-        
-    // 3. Lógica de botones
-        const btnAprobar = document.getElementById('btn-aprobar');
-        const btnRechazar = document.getElementById('btn-rechazar');
-        const btnCerrar = document.getElementById('btn-cerrar-modal');
+      const formData = new FormData(e.target);
+      const endpoint = ticketEditando ? `/api/tickets/${ticketEditando.id_ticket}` : "/api/tickets";
+      const options = ticketEditando
+        ? { method: "PUT", body: formData }
+        : { method: "POST", body: formData };
 
-        const esResuelto = t.estado.toLowerCase().trim() === 'resuelto';
-        
-        // Controlamos visibilidad de botones
-        // Se muestran juntos en el mismo footer
-        btnAprobar.style.display = esResuelto ? 'inline-block' : 'none';
-        btnRechazar.style.display = esResuelto ? 'inline-block' : 'none';
-        
-        // Asignar eventos
-        btnAprobar.onclick = () => cambiarEstadoTicket(t.id_ticket, 'aprobar');
-        btnRechazar.onclick = () => cambiarEstadoTicket(t.id_ticket, 'rechazar');
-        btnCerrar.onclick = () => {
-            document.getElementById('modalTicket').classList.remove('active');
-        };
+      if (ticketEditando && $("archivo").files.length > 0) {
+        formData.append("replaceEvidencias", "1");
+      }
 
-        document.getElementById('modalTicket').classList.add('active');
-    } catch (err) { 
-        console.error("Error al cargar detalle:", err); 
-    }
-}
+      const response = await fetch(endpoint, options);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || "No se pudo guardar el ticket");
+      }
 
-    async function guardarPerfil(e) {
-        e.preventDefault();
-        try {
-            const response = await fetch('/api/perfil', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ avatar: avatarSeleccionadoTemporal })
-            });
-            if (response.ok) {
-                alert('Perfil actualizado');
-                document.getElementById('sidebarAvatar').innerHTML = `<i class="fa-solid ${avatarSeleccionadoTemporal}"></i>`;
-                mostrarInicio();
-            }
-        } catch (error) { console.error('Error:', error); }
-    }
-
-
-    function ocultarTodasLasSecciones() {
-        ['inicio', 'formulario', 'perfil', 'ayuda'].forEach(id => document.getElementById(id)?.classList.add('hidden'));
-        ['nav-inicio', 'nav-formulario', 'nav-perfil', 'nav-ayuda'].forEach(id => document.getElementById(id)?.classList.remove('active'));
-    }
-
-    function mostrarFormulario() { ocultarTodasLasSecciones(); document.getElementById('formulario').classList.remove('hidden'); document.getElementById('nav-formulario').classList.add('active'); }
-    function mostrarPerfil() { ocultarTodasLasSecciones(); document.getElementById('perfil').classList.remove('hidden'); document.getElementById('nav-perfil').classList.add('active'); }
-    function mostrarAyuda() { ocultarTodasLasSecciones(); document.getElementById('ayuda').classList.remove('hidden'); document.getElementById('nav-ayuda').classList.add('active'); }
-
-    document.querySelectorAll('.avatar-option').forEach(opcion => {
-        opcion.addEventListener('click', function() {
-            document.querySelectorAll('.avatar-option').forEach(o => o.classList.remove('selected'));
-            this.classList.add('selected');
-            avatarSeleccionadoTemporal = this.getAttribute('data-avatar');
-        });
-    });
-
-    // =========================================================================
-    // 5. FILTROS AUTOMÁTICOS (Sustituye al botón)
-    // =========================================================================
-    document.getElementById('busqueda').addEventListener('input', aplicarFiltros);
-    document.getElementById('filtroEstado').addEventListener('change', aplicarFiltros);
-    document.getElementById('filtroTipo').addEventListener('change', aplicarFiltros);
-    document.getElementById('filtroPrioridad').addEventListener('change', aplicarFiltros);
-
-function aplicarFiltros() {
-        const estado = document.getElementById('filtroEstado').value;
-        const tipo = document.getElementById('filtroTipo').value;
-        const prioridad = document.getElementById('filtroPrioridad').value;
-        const busqueda = document.getElementById('busqueda').value.toLowerCase();
-
-        const filtrados = ticketsData.filter(t => {
-            const tEst = (t.estado || '').toLowerCase().trim();
-            const tPrio = (t.prioridad || '').toLowerCase().trim();
-            const tipoTicket = (tPrio === 'alta') ? 'INC' : 'REQ';
-
-            // --- AQUÍ ESTÁ EL CAMBIO ---
-            // 1. Convertimos la fecha a texto legible igual que en el admin
-            const tFechaTxt = t.fecha_creacion ? new Date(t.fecha_creacion).toLocaleDateString().toLowerCase() : 's/f';
-            
-            // 2. Ahora la coincidencia de búsqueda (mB) verifica el título O la fecha
-            const mB = t.titulo.toLowerCase().includes(busqueda) || tFechaTxt.includes(busqueda);
-            // ---------------------------
-
-            const mE = (estado === 'Todos' || (estado === 'Pendiente' ? (tEst === 'pendiente' || tEst === 'pendiente_asignacion') : tEst === estado.toLowerCase()));
-            const mT = (tipo === 'Todos' || tipo === tipoTicket);
-            const mP = (prioridad === 'Todos' || tPrio === prioridad.toLowerCase());
-            
-            return mE && mT && mP && mB;
-        });
-        
-        renderizarTabla(filtrados);
-    }
-    
-// Lógica FAQ Acordeón
-    document.querySelectorAll('.faq-pregunta').forEach(boton => {
-        boton.addEventListener('click', () => {
-            const itemActual = boton.parentElement;
-            document.querySelectorAll('.faq-item.abierto').forEach(itemAbierto => {
-                if (itemAbierto !== itemActual) {
-                    itemAbierto.classList.remove('abierto');
-                }
-            });
-            itemActual.classList.toggle('abierto');
-        });
-    });
-
-    // Sincronización en tiempo real
-    setInterval(async () => {
-    if (!document.hidden) {
-        await refrescarDatos(); // Asegúrate de que espere a que termine
-    }
-}, 30000);
-
-    // Carga inicial
-    mostrarInicio();
-});
-
-
-async function cambiarEstadoTicket(ticketId, accion) {
-    // 1. Cerramos el modal inmediatamente para que la interfaz se libere
-    const modal = document.getElementById('modalTicket');
-    if (modal) modal.classList.remove('active');
-
-    try {
-        const response = await fetch(`/api/tickets/${ticketId}/${accion}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' }
-        });
-
-        if (response.ok) {
-            // 2. Refrescamos ANTES de cualquier aviso, para que los contadores cambien YA
-            await refrescarDatos(); 
-            
-            // 3. Opcional: Feedback no bloqueante (puedes usar un toast o un simple log)
-            console.log(`Ticket ${accion} ejecutada correctamente.`);
-        } else {
-            alert('Error al cambiar el estado del ticket.');
-        }
+      toast("success", ticketEditando ? "Ticket actualizado" : "Ticket creado exitosamente");
+      ticketEditando = null;
+      e.target.reset();
+      limpiarPreviewCarga();
+      await refrescarDatos();
+      mostrarInicio();
     } catch (error) {
-        console.error('Error al cambiar estado:', error);
+      console.error(error);
+      toast("error", error.message);
     }
-}
+  });
+
+  function renderizarTabla(data) {
+    const tbody = $("listaTickets");
+    if (!tbody) return;
+    tbody.innerHTML = "";
+
+   const contadores = { sinAsignar: 0, pendientes: 0, proceso: 0, espera: 0, resueltos: 0, cerrados: 0 };
+
+    data.forEach(t => {
+      const est = (t.estado || "").toLowerCase().trim();
+      const prio = (t.prioridad || "media").toLowerCase().trim();
+      const badgeClase = est === "pendiente_asignacion" ? "sin-asig" : (est === "en proceso" ? "proc" : (est === "en espera" ? "espera" : (est === "cerrado" ? "cerr" : (est === "resuelto" ? "resuel" : "pend"))));
+      const icon = est === "pendiente_asignacion" ? "fa-user-clock" : (est === "en proceso" ? "fa-spinner fa-spin" : (est === "en espera" ? "fa-clock" : (est === "resuelto" ? "fa-circle-check" : (est === "cerrado" ? "fa-lock" : "fa-circle-dot"))));
+      const tipoAutomatico = ["alta", "critica"].includes(prio) ? "INC" : "REQ";
+      const claseTipo = tipoAutomatico === "INC" ? "inc" : "req";
+      const totalTecnicos = Number(t.total_tecnicos || 0);
+      const puedeEditar = est === "pendiente_asignacion" && totalTecnicos === 0;
+      const resueltosTecnicos = Number(t.tecnicos_resueltos || 0);
+      const avance = totalTecnicos > 1 && est === "en proceso"
+        ? `<div class="ticket-fecha-tabla">Avance técnico: ${resueltosTecnicos}/${totalTecnicos}</div>`
+        : "";
+
+     if (est === "pendiente_asignacion") contadores.sinAsignar++;
+    else if (est === "pendiente") contadores.pendientes++;
+    else if (est === "en proceso") contadores.proceso++;
+    else if (est === "en espera") contadores.espera++;
+    else if (est === "resuelto") contadores.resueltos++;
+    else if (est === "cerrado") contadores.cerrados++;
+
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td data-label="ID">#${t.id_ticket}</td>
+        <td data-label="Fecha">${t.fecha_creacion ? new Date(t.fecha_creacion).toLocaleString() : "S/F"}</td>
+        <td data-label="Tipo"><span class="tag-ticket ${claseTipo}">${tipoAutomatico}</span></td>
+        <td data-label="Asunto">${escapeHtml(t.titulo)}${avance}</td>
+        <td data-label="Prioridad"><span class="badge ${prio.replace(/\s+/g, "-")}">${escapeHtml((t.prioridad || "Sin evaluar").toUpperCase())}</span></td>
+        <td data-label="Estado"><span class="badge ${badgeClase}"><i class="fa-solid ${icon}"></i> ${escapeHtml(t.estado)}</span></td>
+        <td data-label="Acciones" class="acciones-cell">
+          <div class="flex-gap-8">
+            <button class="btn-ver" data-action="ver" title="Ver detalle"><i class="fa-solid fa-eye"></i></button>
+            ${puedeEditar ? `<button class="btn-ver" data-action="editar" title="Editar"><i class="fa-solid fa-pen"></i></button>
+            <button class="btn-rechazar" data-action="eliminar" title="Eliminar"><i class="fa-solid fa-trash"></i></button>` : ""}
+            ${est === "resuelto" ? `<button class="btn-aprobar" data-action="aprobar" title="Aprobar solución"><i class="fa-solid fa-check"></i></button>
+            <button class="btn-rechazar" data-action="rechazar" title="Rechazar solución"><i class="fa-solid fa-xmark"></i></button>` : ""}
+          </div>
+        </td>`;
+
+      tr.querySelector('[data-action="ver"]')?.addEventListener("click", () => verDetalle(t.id_ticket));
+      tr.querySelector('[data-action="editar"]')?.addEventListener("click", () => mostrarFormulario(t));
+      tr.querySelector('[data-action="eliminar"]')?.addEventListener("click", () => eliminarTicket(t.id_ticket));
+      tr.querySelector('[data-action="aprobar"]')?.addEventListener("click", () => cambiarEstadoTicket(t.id_ticket, "aprobar"));
+      tr.querySelector('[data-action="rechazar"]')?.addEventListener("click", () => cambiarEstadoTicket(t.id_ticket, "rechazar"));
+      tbody.appendChild(tr);
+    });
+
+    $("cSinAsig").innerText = contadores.sinAsignar;
+    $("cPend").innerText = contadores.pendientes;
+    $("cProc").innerText = contadores.proceso;
+    if ($("cEsp")) $("cEsp").innerText = contadores.espera;
+    $("cRes").innerText = contadores.resueltos;
+    $("cCer").innerText = contadores.cerrados;
+  }
+
+  async function pintarEvidencias(ticketId, fallbackArchivo, contenedor) {
+    const evidencias = await fetch(`/api/tickets/${ticketId}/evidencias`).then(r => r.ok ? r.json() : []).catch(() => []);
+    const archivos = evidencias.length ? evidencias.map(e => e.ruta_archivo) : (fallbackArchivo ? [fallbackArchivo] : []);
+    detail.renderCarousel(contenedor, archivos, "No se subió evidencia para este reporte.");
+  }
+
+  async function pintarSoluciones(ticketId, contenedor) {
+    const soluciones = await fetch(`/api/tickets/${ticketId}/soluciones`).then(r => r.ok ? r.json() : []).catch(() => []);
+    detail.renderSolutions(contenedor, soluciones, "Retroalimentación del técnico");
+  }
+
+  async function pintarAsignaciones(ticketId, contenedor) {
+    const asignaciones = await fetch(`/api/tickets/${ticketId}/asignaciones`).then(r => r.ok ? r.json() : []).catch(() => []);
+    detail.renderAssignments(contenedor, asignaciones, "Estado de atencion");
+  }
+
+  async function verDetalle(ticketId) {
+    try {
+      const res = await fetch(`/api/tickets/${ticketId}`);
+      if (!res.ok) throw new Error("No se pudo cargar el ticket");
+      const t = await res.json();
+      $("mTitulo").innerText = `Detalle del Ticket: #${t.id_ticket}`;
+      $("mDescripcion").innerText = t.descripcion || "Sin descripción.";
+      const totalTecnicos = Number(t.total_tecnicos || 0);
+      const resueltosTecnicos = Number(t.tecnicos_resueltos || 0);
+      if (totalTecnicos > 0) {
+        $("mDescripcion").innerText += `\n\nAvance tecnico: ${resueltosTecnicos}/${totalTecnicos} resueltos`;
+      }
+      await pintarEvidencias(ticketId, t.archivo, $("mImagen"));
+      await pintarAsignaciones(ticketId, $("mAsignaciones"));
+      await pintarSoluciones(ticketId, $("mSoluciones"));
+
+      const esResuelto = (t.estado || "").toLowerCase().trim() === "resuelto";
+      $("btn-aprobar").style.display = esResuelto ? "inline-block" : "none";
+      $("btn-rechazar").style.display = esResuelto ? "inline-block" : "none";
+      $("btn-aprobar").onclick = () => cambiarEstadoTicket(t.id_ticket, "aprobar");
+      $("btn-rechazar").onclick = () => cambiarEstadoTicket(t.id_ticket, "rechazar");
+      $("btn-cerrar-modal").onclick = () => $("modalTicket").classList.remove("active");
+      $("modalTicket").classList.add("active");
+    } catch (err) {
+      console.error(err);
+      toast("error", err.message);
+    }
+  }
+
+  async function cambiarEstadoTicket(ticketId, accion) {
+    const body = {};
+    if (accion === "rechazar") {
+      const result = await ask({
+        title: "Motivo del rechazo",
+        input: "textarea",
+        inputLabel: "Indica por qué rechazas la atención",
+        inputValidator: value => !value?.trim() && "Escribe el motivo del rechazo",
+        showCancelButton: true,
+        confirmButtonText: "Rechazar",
+        cancelButtonText: "Cancelar"
+      });
+      if (!result.isConfirmed) return;
+      body.comentario = result.value;
+    }
+
+    $("modalTicket")?.classList.remove("active");
+    const response = await fetch(`/api/tickets/${ticketId}/${accion}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    if (!response.ok) return toast("error", "Error al cambiar el estado del ticket");
+    await refrescarDatos();
+    toast("success", accion === "aprobar" ? "Solución aprobada" : "Atención rechazada");
+  }
+
+  async function eliminarTicket(ticketId) {
+    const result = await ask({
+      title: "Eliminar ticket",
+      text: "Esta acción eliminará el ticket de tus reportes.",
+      showCancelButton: true,
+      confirmButtonText: "Eliminar",
+      cancelButtonText: "Cancelar"
+    });
+    if (!result.isConfirmed) return;
+
+    const res = await fetch(`/api/tickets/${ticketId}`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ motivo: "Eliminado por el usuario" })
+    });
+    if (!res.ok) return toast("error", "No se pudo eliminar el ticket");
+    await refrescarDatos();
+    toast("success", "Ticket eliminado");
+  }
+
+  async function guardarPerfil(e) {
+    e.preventDefault();
+    const response = await fetch("/api/perfil", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ avatar: avatarSeleccionadoTemporal })
+    });
+    if (response.ok) {
+      toast("success", "Perfil actualizado");
+      $("sidebarAvatar").innerHTML = `<i class="fa-solid ${avatarSeleccionadoTemporal}"></i>`;
+      mostrarInicio();
+    }
+  }
+
+  $("formPerfil")?.addEventListener("submit", guardarPerfil);
+  document.querySelectorAll(".avatar-option").forEach(opcion => {
+    opcion.addEventListener("click", function () {
+      document.querySelectorAll(".avatar-option").forEach(o => o.classList.remove("selected"));
+      this.classList.add("selected");
+      avatarSeleccionadoTemporal = this.getAttribute("data-avatar");
+    });
+  });
+
+  ["busqueda", "filtroEstado", "filtroTipo", "filtroPrioridad"].forEach(id => {
+    $(id)?.addEventListener(id === "busqueda" ? "input" : "change", aplicarFiltros);
+  });
+
+  function aplicarFiltros() {
+    const estado = $("filtroEstado")?.value || "Todos";
+    const tipo = $("filtroTipo")?.value || "Todos";
+    const prioridad = $("filtroPrioridad")?.value || "Todos";
+    const busqueda = ($("busqueda")?.value || "").toLowerCase();
+
+    const filtrados = ticketsData.filter(t => {
+      const tEst = (t.estado || "").toLowerCase().trim();
+      const tPrio = (t.prioridad || "media").toLowerCase().trim();
+      const tipoTicket = ["alta", "critica"].includes(tPrio) ? "INC" : "REQ";
+      const tFechaTxt = t.fecha_creacion ? new Date(t.fecha_creacion).toLocaleDateString().toLowerCase() : "s/f";
+      const mB = (t.titulo || "").toLowerCase().includes(busqueda) || tFechaTxt.includes(busqueda);
+      const mE = estado === "Todos" || tEst === estado.toLowerCase();
+      return mE && (tipo === "Todos" || tipo === tipoTicket) && (prioridad === "Todos" || tPrio === prioridad.toLowerCase()) && mB;
+    });
+
+    renderizarTabla(filtrados);
+  }
+
+  document.querySelectorAll(".faq-pregunta").forEach(boton => {
+    boton.addEventListener("click", () => {
+      const itemActual = boton.parentElement;
+      document.querySelectorAll(".faq-item.abierto").forEach(item => item !== itemActual && item.classList.remove("abierto"));
+      itemActual.classList.toggle("abierto");
+    });
+  });
+
+  setInterval(() => { if (!document.hidden) refrescarDatos(); }, 30000);
+  mostrarInicio();
+});

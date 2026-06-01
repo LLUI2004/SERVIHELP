@@ -10,15 +10,29 @@
     <h2 class="logo-login">⚡ ServiHelp</h2>
     <p id="form-title">Inicia sesión para continuar</p>
     
-    <form id="auth-form">
-      <input type="text" id="username" placeholder="Nombre de usuario" required minlength="4">
-      <input type="password" id="password" placeholder="Contraseña" required minlength="4">
-      <button type="submit" id="btn-text" class="btn-main">Ingresar</button>
+<form id="auth-form"> 
+  <input type="text" id="username" placeholder="Nombre o correo" required minlength="4">
+  <input type="email" id="correo" placeholder="Correo" class="hidden">
+  <input type="password" id="password" placeholder="Contraseña" required minlength="4">
+  <button type="submit" id="btn-text" class="btn-main">Ingresar</button>
+</form>
+
+    <form id="reset-form" class="hidden">
+      <input type="text" id="reset-identifier" placeholder="Usuario o correo" required>
+      <input type="text" id="reset-token" placeholder="Token de verificación" class="hidden">
+      <input type="password" id="reset-new-password" placeholder="Nueva contraseña" minlength="4" class="hidden">
+      <input type="password" id="reset-confirm-password" placeholder="Confirmar nueva contraseña" minlength="4" class="hidden">
+      <p id="reset-help" class="reset-help hidden"></p>
+      <button type="submit" id="reset-btn-text" class="btn-main">Solicitar verificación</button>
     </form>
 
     <div style="margin-top: 15px;">
       <span id="toggle-text">¿No tienes cuenta?</span> 
       <span class="toggle-link" id="change-mode">Regístrate aquí</span>
+    </div>
+    <div style="margin-top: 10px;">
+      <span class="toggle-link" id="forgot-password">Olvidé mi contraseña</span>
+      <span class="toggle-link hidden" id="back-login">Volver al inicio</span>
     </div>
     
     <span id="msg"></span>

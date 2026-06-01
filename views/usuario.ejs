@@ -8,18 +8,20 @@
 
 <div id="modalTicket" class="modal">
   <div class="modal-content">
-    <h3 id="mTitulo">Detalle del Ticket</h3>
+    <h3 id="mTitulo" class="modal-title-purple">Detalle del Ticket</h3>
     <hr class="modal-divider">
     <div class="modal-body">
       <p><strong>Descripción:</strong></p>
       <p id="mDescripcion"></p>
-      <p><strong>Evidencia:</strong></p>
+      <p><strong>Evidencia del reporte:</strong></p>
       <div id="mImagen"></div>
+      <div id="mAsignaciones"></div>
+      <div id="mSoluciones"></div>
     </div>
 
     <div class="acciones" id="acciones-modal-footer">
-      <button type="button" class="btn-aprobar" id="btn-aprobar" style="background-color: #28a745; color: white;">Aprobar</button>
-      <button type="button" class="btn-rechazar" id="btn-rechazar" style="background-color: #dc3545; color: white;">Rechazar</button>
+      <button type="button" class="btn-aprobar" id="btn-aprobar">Aprobar</button>
+      <button type="button" class="btn-rechazar" id="btn-rechazar">Rechazar</button>
       <button type="button" class="btn-cancelar" id="btn-cerrar-modal">Cerrar Ventana</button>
     </div>
   </div> 
@@ -27,7 +29,7 @@
 
 <div class="container">
   <aside class="sidebar">
-    <h2 class="logo">⚡ ServiHelp</h2>
+    <h2 class="logo"><i class="fa-solid fa-bolt"></i> ServiHelp</h2>
     <nav>
       <a id="nav-inicio" class="active"><i class="fa-solid fa-house"></i> Inicio</a>
       <a id="nav-formulario"><i class="fa-solid fa-plus"></i> Crear Ticket</a>
@@ -48,13 +50,25 @@
   </aside>
 
   <main class="main">
+    <div class="notif-shell">
+      <button type="button" id="notif-toggle" class="notif-bell" title="Notificaciones">
+        <i class="fa-solid fa-bell"></i>
+        <span id="notif-count" class="notif-count hidden">0</span>
+      </button>
+      <div id="notif-dropdown" class="notif-dropdown hidden">
+        <div class="notif-dropdown-head">Notificaciones</div>
+        <div id="notif-list" class="notif-list"></div>
+      </div>
+    </div>
     <section id="inicio">
   <h1>Panel General de Usuario</h1>
 <div class="cards">
-    <div class="card c-pend"><p>Pendientes</p><h2 id="cPend">0</h2></div>
-    <div class="card c-proc"><p>En Proceso</p><h2 id="cProc">0</h2></div>
-    <div class="card c-resuel"><p>Resueltos</p><h2 id="cRes">0</h2></div> 
-    <div class="card c-cerr"><p>Cerrados</p><h2 id="cCer">0</h2></div>
+  <div class="card c-sin-asig"><p>Pendientes Sin Asignar</p><h2 id="cSinAsig">0</h2></div>  
+  <div class="card c-pend"><p>Pendientes</p><h2 id="cPend">0</h2></div>
+  <div class="card c-proc"><p>En Proceso</p><h2 id="cProc">0</h2></div> 
+  <div class="card c-esp"><p>En Espera</p><h2 id="cEsp">0</h2></div>
+  <div class="card c-resuel"><p>Resueltos</p><h2 id="cRes">0</h2></div>  
+  <div class="card c-cerr"><p>Cerrados</p><h2 id="cCer">0</h2></div>
 </div>
 
       <div class="tabla-container">
@@ -65,12 +79,15 @@
        <input type="text" id="busqueda" class="search-input" placeholder="Buscar por asunto o fecha.">
           </div>
           <select id="filtroEstado" class="search-input select-estado-width">
-            <option value="Todos">Todos los estados</option>
-            <option value="Pendiente">Pendiente</option>
-            <option value="En Proceso">En Proceso</option>
-            <option value="Resuelto">Resuelto</option> 
-            <option value="Cerrado">Cerrado</option>
+            <option value="Todos">Todos los estados</option>  
+            <option value="pendiente_asignacion">Pendientes Sin Asignar</option> 
+            <option value="pendiente">Pendiente</option>
+            <option value="en proceso">En Proceso</option>
+            <option value="en espera">En Espera</option>
+            <option value="resuelto">Resuelto</option> 
+            <option value="cerrado">Cerrado</option>
           </select>
+          
           <select id="filtroTipo" class="search-input select-estado-width">
             <option value="Todos">Todos los tipos</option>
             <option value="INC">INC (Incidencia)</option>
@@ -78,6 +95,8 @@
           </select>
           <select id="filtroPrioridad" class="search-input select-estado-width">
             <option value="Todos">Todas las prioridades</option>
+            <option value="Sin evaluar">Sin evaluar</option>
+            <option value="Critica">Crítica</option>
             <option value="Baja">Baja</option>
             <option value="Media">Media</option>
             <option value="Alta">Alta</option>
@@ -86,7 +105,7 @@
 
         <table>
           <thead>
-            <tr><th>ID</th><th>Fecha de Creación</th><th>Tipo</th><th>Asunto</th><th>Prioridad</th><th>Estado</th><th>Acciones</th></tr>
+          <tr><th>ID</th><th>Fecha de Creación</th><th>Tipo</th><th>Asunto</th><th>Prioridad</th><th>Estado</th><th>Acciones</th></tr>
           </thead>
           <tbody id="listaTickets"></tbody>
         </table>
@@ -97,30 +116,26 @@
       <div class="ticket-box">
         <h3>Nuevo Reporte de Incidencia</h3>
         <form id="formTicket" enctype="multipart/form-data">
-          <div class="grid-2">
-            <div class="input-group"><label>Asunto / Título</label><input type="text" id="titulo" name="titulo" required placeholder="Ej: Falla de internet en oficina 3"></div>
-            <div class="input-group"><label>Área</label>
-
-              <select id="area" name="id_area">
-    <option value="1">Sistemas</option>
-    <option value="2">Soporte Técnico</option>
-    <option value="3">Redes</option>
-  </select>
-          </div>
-          </div>
-          <div class="grid-2">
-            <div class="input-group"><label>Prioridad</label><select id="prioridad" name="prioridad"><option value="Alta">Alta</option><option value="Media" selected>Media</option><option value="Baja">Baja</option></select></div>
-            <div class="input-group"><label>Usuario</label><input type="text" value="<%= user.username %>" disabled></div>
-          </div>
+          <div class="input-group"><label>Asunto / Título</label><input type="text" id="titulo" name="titulo" required placeholder="Ej: Falla de internet en oficina 3"></div>
+          <input type="hidden" id="prioridad" name="prioridad" value="Sin evaluar">
+          <div class="input-group"><label>Usuario</label><input type="text" value="<%= user.username %>" disabled></div>
+          <div class="input-group"><label>Área</label><select id="id_area" name="id_area" required>
+            <option value="">-- Seleccionar Área --</option>
+            <option value="1">Redes</option>
+            <option value="2">Sistemas</option>
+            <option value="3">Soporte Técnico</option>
+          </select></div>
           <label>Descripción</label>
           <textarea id="descripcion" name="descripcion" rows="4" placeholder="Describe detalladamente el problema para ayudarte más rápido..."></textarea>
-          <label>Evidencia</label>
-          <label class="upload-box" for="archivo">
-            <input type="file" id="archivo" name="archivo" hidden>
-            <i id="iconoNube" class="fa-solid fa-cloud-arrow-up fa-2xl cloud-icon-purple"></i>
-            <span id="nArchivo">Haz clic para subir archivo</span>
-          </label>
+          <label for="archivo">Evidencia</label>
+          <div class="upload-hint">
+            <i id="iconoNube" class="fa-solid fa-images fa-1x2 cloud-icon-purple"></i>
+            <span id="nArchivo">Maximo 5 imágenes</span>
+          </div>
+          <input type="file" id="archivo" name="evidencias" accept="image/*" multiple hidden>
+          <div id="preview-evidencias" class="upload-preview"></div>
           <div class="acciones">
+            <button type="button" class="btn-upload" id="btn-evidencias"><i class="fa-solid fa-paperclip"></i> Subir evidencias</button>
             <button type="button" class="btn-cancelar" id="btn-cancelar-ticket">Cancelar</button>
             <button type="submit" class="btn-enviar">Enviar Ticket</button>
           </div>
@@ -152,19 +167,6 @@
           </div>
         </form>
 
-        <div class="notificaciones-container">
-          <h4 class="notif-title"><i class="fa-solid fa-bell"></i> Mensajes e Historial del Técnico</h4>
-          <div id="listaNotificaciones">
-            <div class="notificacion-item">
-              <div class="notif-icono"><i class="fa-solid fa-screwdriver-wrench"></i></div>
-              <div class="notif-contenido">
-                <strong class="notif-item-title">Soporte Técnico asignó tu caso</strong>
-                <p>El técnico Juan Pérez cambió el estado de tu reporte #1001 a "En Proceso".</p>
-                <span>Hace 10 minutos</span>
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
     </section>
 
@@ -183,40 +185,6 @@
             <div class="faq-respuesta">
               <div class="faq-content-padding faq-respuesta-contenido">
                 Es recomendable usar un <strong>título corto, claro y descriptivo</strong>. Evita títulos genéricos como "No funciona" o "Ayuda". Es mucho mejor escribir un resumen directo como <em>"Impresora de contabilidad no jala papel"</em> or <em>"Sin acceso a internet en oficina central"</em>. Esto ayuda al técnico a saber qué herramientas llevar antes de ir a revisarlo.
-              </div>
-            </div>
-          </div>
-
-          <div class="faq-item">
-            <button class="faq-pregunta">
-              ¿Qué área debo seleccionar según mi problema?
-              <i class="fa-solid fa-chevron-down"></i>
-            </button>
-            <div class="faq-respuesta">
-              <div class="faq-respuesta-contenido">
-                Clasificar tu problema adecuadamente acelera el tiempo de respuesta:
-                <ul>
-                  <li><strong>Soporte Técnico:</strong> Problemas físicos o de hardware (pantallas, cables rotos, computadoras que no encienden, periféricos, mouse, etc.).</li>
-                  <li><strong>Redes:</strong> Todo lo relacionado a conectividad (fallas de WiFi, falta de red local, cables de internet desconectados).</li>
-                  <li><strong>Sistemas:</strong> Errores con softwares específicos de la empresa, contraseñas bloqueadas de sistemas internos o instalación de paqueterías.</li>
-                </ul>
-              </div>
-            </div>
-          </div>
-
-          <div class="faq-item">
-            <button class="faq-pregunta">
-              ¿Cómo determinar la prioridad correcta de forma honesta?
-              <i class="fa-solid fa-chevron-down"></i>
-            </button>
-            <div class="faq-respuesta">
-              <div class="faq-respuesta-contenido">
-                Pedimos honestidad al asignar prioridades para no saturar al equipo de IT. Guíate bajo estos criterios estándar de ingeniería:
-                <ul>
-                  <li><strong>Baja:</strong> El problema no afecta tus labores diarias (ej: cambiar el icono de perfil, duda de uso, un pixel muerto secundario).</li>
-                  <li><strong>Media:</strong> Tienes una falla pero puedes seguir trabajando usando alternativas (ej: una impresora no funciona pero puedes mandar a la de la oficina de al lado).</li>
-                  <li><strong>Alta:</strong> Tu trabajo está completamente detenido o afecta a toda una sección (ej: el servidor se cayó, tu computadora no enciende para nada, un fallo de luz en el área).</li>
-                </ul>
               </div>
             </div>
           </div>
@@ -254,11 +222,27 @@
 <script>
   window.currentUserSessionName = "<%= user.username %>";
   document.getElementById('archivo').addEventListener('change', function() {
-    const fileName = this.files[0] ? this.files[0].name : 'Haz clic para subir archivo';
+    if (this.files.length > 5) {
+      if (window.Swal) Swal.fire({
+        icon: 'warning',
+        title: 'Solo puedes subir máximo 5 imágenes.',
+        buttonsStyling: false,
+        customClass: {
+          popup: 'mi-swal-popup',
+          confirmButton: 'btn-enviar',
+          cancelButton: 'btn-cancelar'
+        }
+      });
+      else alert('Solo puedes subir máximo 5 imágenes.');
+      this.value = '';
+      return;
+    }
+    const fileName = this.files.length ? `${this.files.length} imagen(es) seleccionada(s)` : 'Haz clic para subir hasta 5 imágenes';
     document.getElementById('nArchivo').innerText = fileName;
     if(this.files[0]) document.getElementById('iconoNube').className = "fa-solid fa-file-check fa-2xl cloud-icon-purple";
   });
 </script>
+<script src="/ticket-detail.js"></script>
 <script src="/usuario-app.js"></script>
 </body>
 </html>

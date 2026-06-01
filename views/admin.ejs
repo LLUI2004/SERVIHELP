@@ -6,6 +6,7 @@
   <title>Panel del Encargado de IT - ServiHelp</title>
   <link rel="stylesheet" href="/style.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
@@ -13,8 +14,7 @@
 <div class="container">
 
   <aside class="sidebar">
-    <h2 class="logo">⚡ ServiHelp</h2>
-
+    <h2 class="logo"><i class="fa-solid fa-bolt"></i> ServiHelp</h2>
     <nav>
       <a id="nav-dashboard" class="active">
         <i class="fa-solid fa-chart-line"></i>
@@ -47,30 +47,48 @@
        <span class="role" id="rolAdmin">Administrador de IT</span>
         </div>
       </div>
+      <button class="btn-logout" id="logout-btn">
+        <i class="fa-solid fa-right-from-bracket"></i>
+        Salir
+      </button>
     </div>
-
-    <button class="btn-logout" id="logout-btn">
-      <i class="fa-solid fa-right-from-bracket"></i>
-      Salir
-    </button>
   </aside>
 
   <main class="main">
+    <div class="notif-shell">
+      <button type="button" id="notif-toggle" class="notif-bell" title="Notificaciones">
+        <i class="fa-solid fa-bell"></i>
+        <span id="notif-count" class="notif-count hidden">0</span>
+      </button>
+      <div id="notif-dropdown" class="notif-dropdown hidden">
+        <div class="notif-dropdown-head">Notificaciones</div>
+        <div id="notif-list" class="notif-list"></div>
+      </div>
+    </div>
 
     <section id="sec-dashboard">
       <div>
         <h1>Panel General del Encargado de IT</h1>
       </div>
-
       <div class="cards">
+        <div class="card c-sin-asig">
+          <p>Pendientes Sin Asignar</p>
+          <h2 id="kpiSinAsignar">0</h2>
+        </div>
+       
         <div class="card c-pend">
-          <p>Pendientes</p> 
+          <p>Pendientes</p>
           <h2 id="kpiAsignados">0</h2>
         </div>
 
         <div class="card c-proc">
           <p>En Proceso</p>
           <h2 id="kpiProceso">0</h2>
+        </div>
+
+        <div class="card c-esp">
+          <p>En Espera</p>
+          <h2 id="kpiEspera">0</h2>
         </div>
 
         <div class="card c-resuel">
@@ -97,8 +115,10 @@
 
   <select id="filtroEstado" class="search-input select-estado-width" onchange="renderizarTablasDashboard()">
     <option value="todos">Todos los estados</option>
+    <option value="pendiente_asignacion">Pendientes Sin Asignar</option> 
     <option value="pendiente">Pendiente</option>
     <option value="en proceso">En Proceso</option>
+    <option value="en espera">En Espera</option>
     <option value="resuelto">Resuelto</option>
     <option value="cerrado">Cerrado</option>
   </select>
@@ -111,6 +131,8 @@
 
   <select id="filtroPrioridad" class="search-input select-estado-width" onchange="renderizarTablasDashboard()">
     <option value="todos">Todas las prioridades</option>
+    <option value="sin evaluar">Sin evaluar</option>
+    <option value="critica">Crítica</option>
     <option value="baja">Baja</option>
     <option value="media">Media</option>
     <option value="alta">Alta</option>
@@ -147,6 +169,8 @@
         <!-- Filtro específico para esta sección -->
         <select id="filtro-prioridad-designar" class="select-estado-width custom-select-dark">
           <option value="todos">Todas las prioridades</option>
+          <option value="sin evaluar">Sin evaluar</option>
+          <option value="critica">Crítica</option>
           <option value="alta">Alta</option>
           <option value="media">Media</option>
           <option value="baja">Baja</option>
@@ -199,6 +223,7 @@
                   <thead>
                      <tr>
             <th class="th-usuario-nombre">NOMBRE</th>
+            <th class="th-usuario-correo">CORREO</th>
             <th class="th-usuario-rol">ROL</th>
             <th class="th-usuario-acciones">ACCIONES</th>
         </tr>
@@ -232,6 +257,10 @@
           <p>En Proceso</p>
           <h2 id="kpiProceso-analisis">0</h2>
         </div>
+        <div class="card c-esp">
+          <p>En Espera</p>
+          <h2 id="kpiEspera-analisis">0</h2>
+        </div>
         <div class="card card-border-resuelto">
           <p>Resueltos</p>
           <h2 id="kpiResueltos-analisis">0</h2>
@@ -264,18 +293,17 @@
 
 <div id="modal-ticket-tecnico" class="modal">
   <div class="modal-content">
-    <span class="close-modal" id="close-modal-ticket-x">&times;</span>
     <h3 id="m-id-ticket" class="modal-title-purple">Detalle del Ticket</h3>
     <hr class="modal-divider">
-    
-    <div class="input-group">
-      <label><strong>Descripción del Reporte:</strong></label>
+    <div class="modal-body">
+      <p><strong>Descripción:</strong></p>
       <p id="m-descripcion-ticket" class="faq-respuesta-contenido"></p>
-    </div>
 
-    <div class="input-group">
-      <label><strong>Evidencia Adjunta:</strong></label>
+      <p><strong>Evidencia del reporte:</strong></p>
       <div id="m-evidencia-contenedor"></div>
+      <div id="m-rechazos-contenedor"></div>
+      <div id="m-asignaciones-contenedor"></div>
+      <div id="m-soluciones-contenedor"></div>
     </div>
 
     <div class="acciones modal-footer-line">
@@ -294,6 +322,10 @@
       <div class="input-group">
         <label>Nombre de Usuario (Login):</label>
         <input type="text" id="reg-username" placeholder="Ej. cmendoza" required>
+      </div>
+      <div class="input-group">
+        <label>Correo:</label>
+        <input type="email" id="reg-correo" placeholder="usuario@correo.com">
       </div>
       <div class="input-group">
         <label>Contraseña:</label>
@@ -322,6 +354,7 @@
   </div>
 </div>
 
+<script src="/ticket-detail.js"></script>
 <script src="/admin-app.js"></script>
 </body>
 </html>

@@ -1,386 +1,477 @@
-// =========================================================================
-// VARIABLES DE ESTADO GLOBAL
-// =========================================================================
 let ticketsGlobales = [];
 let usuariosGlobales = [];
+let areasGlobales = [];
 let charts = { estado: null, prioridad: null };
 
-// =========================================================================
-// ORQUESTADOR PRINCIPAL
-// =========================================================================
+const $ = id => document.getElementById(id);
+const detail = window.ServiHelpTicketDetail;
+const swalEstilo = {
+  buttonsStyling: false,
+  customClass: {
+    popup: "mi-swal-popup",
+    confirmButton: "btn-enviar",
+    cancelButton: "btn-cancelar",
+    textarea: "mi-swal-textarea",
+    input: "mi-swal-input"
+  }
+};
+const themedSwal = opts => Swal.fire({
+  ...swalEstilo,
+  ...opts,
+  customClass: { ...swalEstilo.customClass, ...(opts.customClass || {}) }
+});
+const toast = (icon, title) => window.Swal
+  ? themedSwal({ icon, title, timer: 1800, showConfirmButton: false })
+  : alert(title);
+const confirmBox = (title, text) => window.Swal
+  ? themedSwal({ icon: "warning", title, text, showCancelButton: true, confirmButtonText: "Confirmar", cancelButtonText: "Cancelar" })
+  : Promise.resolve({ isConfirmed: confirm(`${title}\n${text || ""}`) });
+const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, c => ({
+  "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+}[c]));
+const urlArchivo = archivo => archivo?.startsWith("/uploads/") ? archivo : `/uploads/${archivo}`;
+const PRIORIDADES_ADMIN = ["Baja", "Media", "Alta", "Critica"];
+const prioridadKey = value => String(value || "Sin evaluar").toLowerCase().trim();
+const prioridadLabel = value => {
+  const key = prioridadKey(value);
+  if (key === "critica") return "CRITICA";
+  if (key === "sin evaluar") return "SIN EVALUAR";
+  return String(value || "Sin evaluar").toUpperCase();
+};
+const prioridadOptions = selected => `<option value="">-- Evaluar prioridad --</option>${PRIORIDADES_ADMIN.map(p => `<option value="${p}" ${prioridadKey(selected) === prioridadKey(p) ? "selected" : ""}>${p === "Critica" ? "Crítica" : p}</option>`).join("")}`;
+const tipoPorPrioridad = prioridad => ["alta", "critica"].includes(prioridadKey(prioridad)) ? "inc" : "req";
+
 document.addEventListener("DOMContentLoaded", () => {
-    cargarDatosDesdeServidor();
+  detail?.initNotificationBell?.();
+  cargarDatosDesdeServidor();
 
-    // Eventos Dashboard
-    document.getElementById('btnFiltrar')?.addEventListener('click', renderizarTablasDashboard);
-    document.getElementById('busqueda')?.addEventListener('input', renderizarTablasDashboard);
-    document.getElementById('filtroEstado')?.addEventListener('change', renderizarTablasDashboard);
-    document.getElementById('filtroPrioridad')?.addEventListener('change', renderizarTablasDashboard);
-    document.getElementById('filtroTipo')?.addEventListener('change', renderizarTablasDashboard);
-    
-    // Eventos Gestión Usuarios
-    document.getElementById('input-buscar')?.addEventListener('input', filtrarUsuarios);
-    document.getElementById('filtro-rol')?.addEventListener('change', filtrarUsuarios);
-    
-    // Evento Selector Dinámico Pestaña Designar
-    document.getElementById('filtro-prioridad-designar')?.addEventListener('change', renderizarTicketsADesignar);
+  $("btnFiltrar")?.addEventListener("click", renderizarTablasDashboard);
+  $("busqueda")?.addEventListener("input", renderizarTablasDashboard);
+  $("filtroEstado")?.addEventListener("change", renderizarTablasDashboard);
+  $("filtroPrioridad")?.addEventListener("change", renderizarTablasDashboard);
+  $("filtroTipo")?.addEventListener("change", renderizarTablasDashboard);
+  $("input-buscar")?.addEventListener("input", filtrarUsuarios);
+  $("filtro-rol")?.addEventListener("change", filtrarUsuarios);
+  $("filtro-prioridad-designar")?.addEventListener("change", renderizarTicketsADesignar);
+  $("btn-cerrar-modal-tecnico-footer")?.addEventListener("click", () => $("modal-ticket-tecnico")?.classList.remove("active"));
+  $("logout-btn")?.addEventListener("click", async () => {
+    const res = await fetch("/logout", { method: "POST" });
+    if (res.ok) window.location.href = "/";
+  });
 
-    // Modales y Navegación
-    const modalTicket = document.getElementById('modal-ticket-tecnico');
-    document.getElementById('btn-cerrar-modal-tecnico-footer')?.addEventListener('click', () => { modalTicket?.classList.remove('active'); });
-    document.getElementById('close-modal-ticket-x')?.addEventListener('click', () => { modalTicket?.classList.remove('active'); });
-    document.getElementById('logout-btn')?.addEventListener('click', async () => { const res = await fetch('/logout', { method: 'POST' }); if(res.ok) window.location.href = '/'; });
+  const navs = { dash: $("nav-dashboard"), des: $("nav-designar"), ges: $("nav-gestion"), ana: $("nav-analisis") };
+  const secs = { dash: $("sec-dashboard"), des: $("sec-designar"), ges: $("sec-gestion"), ana: $("sec-analisis") };
+  const show = key => {
+    Object.values(navs).forEach(m => m?.classList.remove("active"));
+    Object.values(secs).forEach(s => s?.classList.add("hidden"));
+    navs[key]?.classList.add("active");
+    secs[key]?.classList.remove("hidden");
+  };
+  navs.dash?.addEventListener("click", () => { show("dash"); inicializarPanelAdmin(); });
+  navs.des?.addEventListener("click", () => { show("des"); renderizarTicketsADesignar(); });
+  navs.ges?.addEventListener("click", () => { show("ges"); actualizarVistasGestion(); });
+  navs.ana?.addEventListener("click", () => { show("ana"); renderizarCentroAnalisis(); });
 
-    // Navegación Sidebar
-    const navs = { dash: document.getElementById('nav-dashboard'), des: document.getElementById('nav-designar'), ges: document.getElementById('nav-gestion'), ana: document.getElementById('nav-analisis') };
-    const secs = { dash: document.getElementById('sec-dashboard'), des: document.getElementById('sec-designar'), ges: document.getElementById('sec-gestion'), ana: document.getElementById('sec-analisis') };
+  const modalUser = $("modal-nuevo-usuario");
+  $("btn-nuevo-usuario")?.addEventListener("click", () => modalUser?.classList.add("active"));
+  $("close-modal-user")?.addEventListener("click", () => modalUser?.classList.remove("active"));
+  $("btn-cancelar-user")?.addEventListener("click", () => modalUser?.classList.remove("active"));
 
-    function desactivarTodosLosMenus() {
-        Object.values(navs).forEach(m => m?.classList.remove('active'));
-        Object.values(secs).forEach(s => s?.classList.add('hidden'));
+  $("form-registro-usuario")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const valorRol = $("reg-rol").value;
+    const correo = $("reg-correo")?.value.trim();
+    if (!correo) {
+      themedSwal({
+        icon: "warning",
+        title: "Correo obligatorio",
+        text: "Debes ingresar un correo electrónico para crear la cuenta."
+      });
+      return;
     }
 
-    if(navs.dash) navs.dash.addEventListener('click', () => { desactivarTodosLosMenus(); navs.dash.classList.add('active'); secs.dash.classList.remove('hidden'); inicializarPanelAdmin(); });
-    if(navs.des) navs.des.addEventListener('click', () => { desactivarTodosLosMenus(); navs.des.classList.add('active'); secs.des.classList.remove('hidden'); renderizarTicketsADesignar(); });
-    if(navs.ges) navs.ges.addEventListener('click', () => { desactivarTodosLosMenus(); navs.ges.classList.add('active'); secs.ges.classList.remove('hidden'); actualizarVistasGestion(); });
-    if(navs.ana) navs.ana.addEventListener('click', () => { desactivarTodosLosMenus(); navs.ana.classList.add('active'); secs.ana.classList.remove('hidden'); renderizarCentroAnalisis(); });
+    const body = {
+      username: $("reg-username").value.trim(),
+      password: $("reg-password").value,
+      role: valorRol,
+      rol: valorRol,
+      nombre: $("reg-username").value.trim(),
+      correo: correo,
+      area: "sistemas"
+    };
 
-    // Modal Usuario
-    const modalUser = document.getElementById('modal-nuevo-usuario');
-    document.getElementById('btn-nuevo-usuario')?.addEventListener('click', () => modalUser?.classList.add('active'));
-    document.getElementById('close-modal-user')?.addEventListener('click', () => modalUser?.classList.remove('active'));
-    document.getElementById('btn-cancelar-user')?.addEventListener('click', () => modalUser?.classList.remove('active'));
-
-    document.getElementById('form-registro-usuario')?.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const valorRol = document.getElementById('reg-rol').value;
-        
-        const body = { 
-            username: document.getElementById('reg-username').value.trim(), 
-            password: document.getElementById('reg-password').value, 
-            role: valorRol, 
-            rol: valorRol,
-            id_rol: valorRol,
-            nombre: "Usuario Nuevo", 
-            area: "General" 
-        };
-        
-        try {
-            const res = await fetch('/register', { 
-                method: 'POST', 
-                headers: { 'Content-Type': 'application/json' }, 
-                body: JSON.stringify(body) 
-            });
-            if (!res.ok) throw new Error('Error al guardar la cuenta');
-            alert('Usuario creado correctamente.');
-            document.getElementById('form-registro-usuario').reset();
-            modalUser?.classList.remove('active');
-            await cargarDatosDesdeServidor();
-        } catch (e) { alert(e.message); }
-    });
+    try {
+      const res = await fetch("/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Error al guardar la cuenta");
+      }
+      toast("success", "Usuario creado correctamente");
+      e.target.reset();
+      modalUser?.classList.remove("active");
+      await cargarDatosDesdeServidor();
+    } catch (e) {
+      toast("error", e.message);
+    }
+  });
 });
 
-// =========================================================================
-// LÓGICA DE RENDERIZADO CON DISEÑO UNIFICADO
-// =========================================================================
-
 async function cargarDatosDesdeServidor() {
-    try {
-        const [resT, resU] = await Promise.all([fetch('/api/admin/tickets'), fetch('/api/usuarios')]);
-        
-        if (resT.ok) {
-            ticketsGlobales = await resT.json();
-            // Pégalo aquí abajo:
-            console.log("Primer ticket recibido:", ticketsGlobales[0]); 
-        }
-        
-        if (resU.ok) usuariosGlobales = await resU.json();
-        
-        inicializarPanelAdmin();
-        actualizarVistasGestion();
-        renderizarTicketsADesignar();
-        renderizarCentroAnalisis(); 
-        cargarTecnicosEnSelect();
-        
-    } catch (e) { console.error("Error en carga global:", e); }
+  try {
+    const [resT, resU, resA] = await Promise.all([fetch("/api/admin/tickets"), fetch("/api/usuarios"), fetch("/api/areas")]);
+    if (resT.ok) ticketsGlobales = await resT.json();
+    if (resU.ok) usuariosGlobales = await resU.json();
+    if (resA.ok) areasGlobales = await resA.json();
+
+    inicializarPanelAdmin();
+    actualizarVistasGestion();
+    renderizarTicketsADesignar();
+    cargarTecnicosEnSelect();
+    renderizarCentroAnalisis();
+  } catch (e) {
+    console.error("Error en carga global:", e);
+  }
+}
+
+function estadoClean(ticket) {
+  return (ticket.estado || "").toLowerCase().trim();
 }
 
 function inicializarPanelAdmin() {
-    let p = 0, ep = 0, r = 0, c = 0;
-    
-    ticketsGlobales.forEach(t => {
-        const est = (t.estado || '').toLowerCase().trim();
-        if(est === 'pendiente') p++; 
-        else if(est === 'en proceso') ep++; 
-        else if(est === 'resuelto') r++; 
-        else if(est === 'cerrado') c++;
-    });
-    
-    const setKpi = (id, val) => { if(document.getElementById(id)) document.getElementById(id).innerText = val; };
-    setKpi('kpiAsignados', p); 
-    setKpi('kpiProceso', ep); 
-    setKpi('kpiResueltos', r); 
-    setKpi('kpiCerrados', c);
-    
-    renderizarTablasDashboard();
+  const stats = { p: 0, sin: 0, ep: 0, esp: 0, r: 0, c: 0 };
+  ticketsGlobales.forEach(t => {
+    const est = estadoClean(t);
+    if (est === "pendiente") stats.p++;
+    if ((est === "pendiente" || est === "pendiente_asignacion") && (!t.total_tecnicos || Number(t.total_tecnicos) === 0)) stats.sin++;
+    else if (est === "en proceso") stats.ep++;
+    else if (est === "en espera") stats.esp++;
+    else if (est === "resuelto") stats.r++;
+    else if (est === "cerrado") stats.c++;
+  });
+
+  [["kpiAsignados", stats.p], ["kpiSinAsignar", stats.sin], ["kpiProceso", stats.ep], ["kpiEspera", stats.esp], ["kpiResueltos", stats.r], ["kpiCerrados", stats.c]]
+    .forEach(([id, val]) => { if ($(id)) $(id).innerText = val; });
+  renderizarTablasDashboard();
 }
 
 function renderizarTablasDashboard() {
-    const tbody = document.getElementById('tbody-resumen-mis-tickets');
-    if (!tbody) return;
+  const tbody = $("tbody-resumen-mis-tickets");
+  if (!tbody) return;
 
-    const busqueda = document.getElementById('busqueda').value.toLowerCase();
-    const filtro = { 
-        est: document.getElementById('filtroEstado').value.toLowerCase().trim(), 
-        tipo: document.getElementById('filtroTipo').value.toLowerCase().trim(), 
-        prio: document.getElementById('filtroPrioridad').value.toLowerCase().trim() 
-    };
+  const busqueda = ($("busqueda")?.value || "").toLowerCase();
+  const filtro = {
+    est: ($("filtroEstado")?.value || "todos").toLowerCase().trim(),
+    tipo: ($("filtroTipo")?.value || "todos").toLowerCase().trim(),
+    prio: ($("filtroPrioridad")?.value || "todos").toLowerCase().trim()
+  };
 
-    tbody.innerHTML = ticketsGlobales.filter(t => {
-        const tEstado = (t.estado || '').toLowerCase().trim();
-        const tPrioridad = (t.prioridad || '').toLowerCase().trim();
-        const tTitulo = (t.titulo || '').toLowerCase();
-        
-        const tFechaTxt = t.fecha_creacion ? new Date(t.fecha_creacion).toLocaleDateString().toLowerCase() : 's/f';
+  const filtrados = ticketsGlobales.filter(t => {
+    const tEstado = estadoClean(t);
+    const tPrioridad = prioridadKey(t.prioridad);
+    const tipoCalculado = tipoPorPrioridad(t.prioridad);
+    const fecha = t.fecha_creacion ? new Date(t.fecha_creacion).toLocaleDateString().toLowerCase() : "s/f";
+    const creador = (t.usuario_creador || t.username_creador || "").toLowerCase();
+    const coincideBusqueda = (t.titulo || "").toLowerCase().includes(busqueda) || fecha.includes(busqueda) || creador.includes(busqueda);
+    return coincideBusqueda
+      && (filtro.est === "todos" || tEstado === filtro.est)
+      && (filtro.tipo === "todos" || tipoCalculado === filtro.tipo)
+      && (filtro.prio === "todos" || tPrioridad === filtro.prio);
+  });
 
-        let creadorNombre = 'n/a';
-        if (t.usuario_creador) {
-            creadorNombre = t.usuario_creador;
-        } else if (t.username_creador) {
-            creadorNombre = t.username_creador;
-        } else {
-            const idBuscar = t.id_usuario_creador || t.id_usuario;
-            if (idBuscar) {
-                const uEncontrado = usuariosGlobales.find(u => u.id_usuario == idBuscar);
-                if (uEncontrado) creadorNombre = uEncontrado.username;
-            }
-        }
-        const tCreador = creadorNombre.toLowerCase();
+  tbody.innerHTML = filtrados.map(t => {
+    const est = estadoClean(t);
+    const badgeClase = est === "pendiente_asignacion" ? "sin-asig" : (est === "en proceso" ? "proc"  : (est === "en espera" ? "espera" : (est === "cerrado" ? "cerr"  : (est === "resuelto" ? "resuel" : "pend"))));
+    const icon = est === "pendiente_asignacion" ? "fa-user-clock" : (est === "en proceso" ? "fa-spinner fa-spin"  : (est === "en espera" ? "fa-clock" : (est === "resuelto" ? "fa-circle-check"  : (est === "cerrado" ? "fa-lock" : "fa-circle-dot"))));
+    const prio = prioridadKey(t.prioridad);
+    const tipoAutomatico = tipoPorPrioridad(t.prioridad) === "inc" ? "INC" : "REQ";
+    const claseTipo = tipoAutomatico === "INC" ? "inc" : "req";
+    const fecha = t.fecha_creacion ? new Date(t.fecha_creacion).toLocaleString() : "S/F";
+    const nombreTecnico = t.tecnicos_asignados || (usuariosGlobales.find(u => u.id_usuario == t.id_tecnico_asignado)?.username) || "Sin asignar";
+    const totalTecnicos = Number(t.total_tecnicos || 0);
+    const resueltosTecnicos = Number(t.tecnicos_resueltos || 0);
+    const avanceTecnico = totalTecnicos > 1 ? `<div class="ticket-fecha-tabla">Avance tecnico: ${resueltosTecnicos}/${totalTecnicos}</div>` : "";
 
-        const prioTexto = (t.prioridad || '').toLowerCase().trim();
-        const tipoCalculado = (prioTexto === 'alta') ? 'inc' : 'req';
+    const puedeAsignar = ["pendiente", "pendiente_asignacion", "en proceso"].includes(est);
 
-        const coincideBusqueda = tTitulo.includes(busqueda) || 
-                                 tFechaTxt.includes(busqueda) || 
-                                 tCreador.includes(busqueda);
+    return `<tr>
+      <td data-label="ID"><span class="id-text">#${t.id_ticket}</span></td>
+      <td data-label="Tipo"><span class="tag-ticket ${claseTipo}">${tipoAutomatico}</span></td>
+      <td data-label="Asunto"><div class="ticket-titulo-tabla">${escapeHtml(t.titulo)}</div><div class="ticket-fecha-tabla"><i class="fa-solid fa-calendar-days"></i> ${fecha}</div></td>
+      <td data-label="Solicitante">${escapeHtml(t.usuario_creador || "N/A")}</td>
+      <td data-label="Prioridad"><span class="badge ${prio.replace(/\s+/g, "-")}">${escapeHtml(prioridadLabel(t.prioridad))}</span></td>
+      <td data-label="Estado"><span class="badge ${badgeClase}"><i class="fa-solid ${icon}"></i> ${escapeHtml(t.estado)}</span></td>
+      <td data-label="Asignado a"><strong class="tech-assigned-text">${escapeHtml(nombreTecnico)}</strong>${avanceTecnico}</td>
+      <td data-label="Acciones">
+        <div class="flex-gap-8">
+          <button class="btn-ver" onclick="verDetalleTicketAdmin(${t.id_ticket})" title="Ver detalle"><i class="fa-solid fa-eye"></i></button>
+          ${puedeAsignar ? `<button class="btn-ver" onclick="abrirAsignacionAdmin(${t.id_ticket})" title="Gestionar técnicos"><i class="fa-solid fa-user-plus"></i></button>` : ""}
+        </div>
+      </td>
+    </tr>`;
+  }).join("");
 
-        return coincideBusqueda && 
-               (filtro.est === 'todos' || tEstado === filtro.est) &&
-               (filtro.tipo === 'todos' || tipoCalculado === filtro.tipo) &&
-               (filtro.prio === 'todos' || tPrioridad === filtro.prio);
-    }).map(t => {
-        const est = (t.estado || '').toLowerCase().trim();
-        const badgeClase = est === 'en proceso' ? 'proc' : (est === 'cerrado' ? 'cerr' : (est === 'resuelto' ? 'resuel' : 'pend'));
-        const icon = est === 'en proceso' ? 'fa-spinner fa-spin' : 
-                     (est === 'resuelto' ? 'fa-circle-check' : 
-                     (est === 'cerrado' ? 'fa-lock' : 'fa-circle-dot'));
-        
-        const prioTexto = (t.prioridad || '').toLowerCase().trim();
-        const tipoAutomatico = (prioTexto === 'alta') ? 'INC' : 'REQ';
-        const claseTipo = (tipoAutomatico === 'INC') ? 'inc' : 'req';
-
-        const fechaFormateada = t.fecha_creacion ? new Date(t.fecha_creacion).toLocaleDateString() : 'S/F';
-
-        let creadorNombre = 'N/A';
-        if (t.usuario_creador) {
-            creadorNombre = t.usuario_creador;
-        } else if (t.username_creador) {
-            creadorNombre = t.username_creador;
-        } else {
-            const idBuscar = t.id_usuario_creador || t.id_usuario;
-            if (idBuscar) {
-                const uEncontrado = usuariosGlobales.find(u => u.id_usuario == idBuscar);
-                if (uEncontrado) creadorNombre = uEncontrado.username;
-            }
-        }
-        
-        const tecnicoAsignado = usuariosGlobales.find(u => u.id_usuario == t.id_tecnico_asignado);
-        const nombreTecnicoMostrar = tecnicoAsignado ? tecnicoAsignado.username : 'Sin Asignar';
-        
-        return `<tr>
-            <td><span class="id-text">#${t.id_ticket}</span></td>
-            <td><span class="tag-ticket ${claseTipo}">${tipoAutomatico}</span></td>
-            <td>
-                <div class="ticket-titulo-tabla">${t.titulo}</div>
-                <div class="ticket-fecha-tabla">
-                    <i class="fa-solid fa-calendar-days"></i> ${fechaFormateada}
-                </div>
-            </td>
-            <td>${creadorNombre}</td>
-            <td><span class="badge ${t.prioridad.toLowerCase().trim()}">${t.prioridad.toUpperCase()}</span></td>
-            <td><span class="badge ${badgeClase}"><i class="fa-solid ${icon}"></i> ${t.estado}</span></td>
-            <td><strong class="tech-assigned-text">${nombreTecnicoMostrar}</strong></td>
-            <td><button class="btn-ver" onclick="verDetalleTicketAdmin(${t.id_ticket})"><i class="fa-solid fa-eye"></i></button></td>
-        </tr>`;
-    }).join('');
+  if (filtrados.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="8" class="table-empty-message">No hay tickets con esos filtros.</td></tr>`;
+  }
 }
 
-window.verDetalleTicketAdmin = function(id) {
-    const t = ticketsGlobales.find(t => t.id_ticket == id);
-    if(t) {
-        document.getElementById('m-id-ticket').innerText = `Detalle: #${id}`;
-        document.getElementById('m-descripcion-ticket').innerText = t.descripcion || "Sin descripción.";
+window.verDetalleTicketAdmin = async function (id) {
+  const t = ticketsGlobales.find(ticket => ticket.id_ticket == id);
+  if (!t) return;
 
-        const contenedorEvidencia = document.getElementById('m-evidencia-contenedor');
-        contenedorEvidencia.innerHTML = ''; 
-        contenedorEvidencia.className = "modal-evidencia-box";
+  $("m-id-ticket").innerText = `Detalle: #${id}`;
+  $("m-descripcion-ticket").innerText = t.descripcion || "Sin descripción.";
 
-        if (t.archivo) {
-            const rutaImagen = t.archivo.startsWith('/uploads/') ? t.archivo : `/uploads/${t.archivo}`;
-            contenedorEvidencia.innerHTML = `<img src="${rutaImagen}" class="modal-evidencia-img" alt="Evidencia">`;
-            contenedorEvidencia.onclick = () => window.open(rutaImagen, '_blank');
-        } else {
-            contenedorEvidencia.innerHTML = `<p class="modal-evidencia-vacio">No hay archivos adjuntos.</p>`;
-            contenedorEvidencia.onclick = null;
-        }
+  const evidencias = await fetch(`/api/tickets/${id}/evidencias`).then(r => r.ok ? r.json() : []).catch(() => []);
+  const archivos = evidencias.length ? evidencias.map(e => e.ruta_archivo) : (t.archivo ? [t.archivo] : []);
+  detail.renderCarousel($("m-evidencia-contenedor"), archivos, "No hay archivos adjuntos.");
 
-        document.getElementById('modal-ticket-tecnico').classList.add('active');
-    }
+  const asignaciones = await fetch(`/api/tickets/${id}/asignaciones`).then(r => r.ok ? r.json() : []).catch(() => []);
+  $("m-asignaciones-contenedor").innerHTML = asignaciones.length
+    ? `<h4 class="modal-subtitle">Asignaciones</h4>${asignaciones.map(a => `<div class="solution-note"><strong>${escapeHtml(a.tecnico)}</strong><p>${escapeHtml(a.area_asignada || "Sin área")} · ${escapeHtml(a.estado_asignacion)}</p><span>${a.fecha_asignacion ? new Date(a.fecha_asignacion).toLocaleString() : "S/F"}</span></div>`).join("")}`
+    : "";
+
+  detail.renderAssignments($("m-asignaciones-contenedor"), asignaciones, "Asignaciones");
+
+  const rechazos = await fetch(`/api/tickets/${id}/rechazos`).then(r => r.ok ? r.json() : []).catch(() => []);
+  $("m-rechazos-contenedor").innerHTML = rechazos.length
+    ? `<h4 class="modal-subtitle modal-subtitle-warning">Motivo de devolución</h4>${rechazos.map(r => `<div class="solution-note rejection-note"><div class="solution-note-head"><strong>${escapeHtml(r.usuario || "Usuario")}</strong><span>${r.fecha_rechazo ? new Date(r.fecha_rechazo).toLocaleString() : "S/F"}</span></div><p>${escapeHtml(r.comentario || "Sin comentario.")}</p></div>`).join("")}`
+    : "";
+
+  const soluciones = await fetch(`/api/tickets/${id}/soluciones`).then(r => r.ok ? r.json() : []).catch(() => []);
+  detail.renderSolutions($("m-soluciones-contenedor"), soluciones, "Observaciones del técnico");
+
+  $("modal-ticket-tecnico").classList.add("active");
 };
 
-window.procesarAsignacionAdmin = async function(id) {
-    const id_tecnico = document.getElementById(`sel-${id}`)?.value;
-    if(!id_tecnico) return alert("Selecciona un técnico.");
+window.procesarAsignacionAdmin = async function (id) {
+  const id_tecnicos = [...document.querySelectorAll(`[data-ticket-tecnico="${id}"]:checked`)].map(input => input.value);
+  const id_area_admin = $(`area-${id}`)?.value;
+  const prioridad = $(`prioridad-${id}`)?.value;
+  if (id_tecnicos.length === 0) return toast("warning", "Selecciona al menos un técnico");
+  if (!id_area_admin) return toast("warning", "Selecciona el área");
 
-    try {
-        const res = await fetch(`/api/admin/tickets/${id}/asignar`, { 
-            method: 'PUT', 
-            headers: {'Content-Type': 'application/json'}, 
-            body: JSON.stringify({ id_tecnico })
-        });
-        
-        if(res.ok) { 
-            await cargarDatosDesdeServidor(); 
-            alert('Ticket asignado correctamente.'); 
-        }
-    } catch (e) { console.error(e); }
-}; 
+  if (!prioridad) return toast("warning", "Selecciona la prioridad");
 
-// =========================================================================
-// NUEVA RENDERIZACIÓN REFACTORIZADA TIPO KANBAN (VISTA TÉCNICO COMPATIBLE)
-// =========================================================================
+  const res = await fetch(`/api/admin/tickets/${id}/asignar-multiple`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id_tecnicos, id_area_admin, prioridad })
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    return toast("error", data.error || "No se pudo asignar el ticket");
+  }
+  await cargarDatosDesdeServidor();
+  toast("success", "Ticket asignado correctamente");
+};
+
 async function renderizarTicketsADesignar() {
-    const contenedor = document.getElementById('contenedor-cards-designar');
-    if (!contenedor) return;
-    const tecnicos = usuariosGlobales.filter(u => (u.role || u.rol || '').toLowerCase() === 'tecnico');
-    const pFiltro = document.getElementById('filtro-prioridad-designar')?.value || 'todos';
-    const sinAsignar = ticketsGlobales.filter(t => {
-        const est = (t.estado || '').toLowerCase().trim();
-        return (!t.id_tecnico_asignado || t.id_tecnico_asignado === 'SIN_ASIGNAR' || t.id_tecnico_asignado == 0) && (est === 'pendiente' || est === 'pendiente_asignacion') && (pFiltro === 'todos' || t.prioridad.toLowerCase().trim() === pFiltro);
-    });
-    if (document.getElementById('badge-contador-designar')) document.getElementById('badge-contador-designar').innerText = `${sinAsignar.length} tickets sin designar`;
-    if (sinAsignar.length === 0) { contenedor.innerHTML = `<div class="no-tickets-alert">No hay órdenes de soporte por designar con estos criterios.</div>`; return; }
+  const contenedor = $("contenedor-cards-designar");
+  if (!contenedor) return;
+  const tecnicos = usuariosGlobales.filter(u => (u.role || u.rol || "").toLowerCase() === "tecnico");
+  const pFiltro = $("filtro-prioridad-designar")?.value || "todos";
+  const asignables = ticketsGlobales.filter(t => {
+    const est = estadoClean(t);
+    const prio = prioridadKey(t.prioridad);
+    return (!t.total_tecnicos || Number(t.total_tecnicos) === 0)
+      && (est === "pendiente" || est === "pendiente_asignacion")
+      && (pFiltro === "todos" || prio === pFiltro);
+  });
 
-    contenedor.innerHTML = sinAsignar.map(t => {
-        const prio = (t.prioridad || '').toLowerCase().trim();
-        const fechaFormateada = t.fecha_creacion ? new Date(t.fecha_creacion).toLocaleDateString() : 'S/F';
-        
-        // Buscamos el objeto completo del usuario en nuestra lista global para saber su área
-        const idBuscar = t.id_usuario_creador || t.id_usuario;
-        const uEncontrado = usuariosGlobales.find(u => u.id_usuario == idBuscar);
-        
-        // Si el ticket ya trae el nombre guardado lo usa, si no, lo saca del usuario encontrado
-        const creadorNombre = t.usuario_creador || t.username_creador || (uEncontrado ? uEncontrado.username : 'N/A');
-       // Ahora, gracias al JOIN en el Repository, el nombre viene directamente en el ticket
-       const creadorArea = t.nombre_area || 'General';
+  $("badge-contador-designar").innerText = `${asignables.length} tickets sin designar`;
+  if (asignables.length === 0) {
+    contenedor.innerHTML = `<div class="no-tickets-alert">No hay órdenes de soporte para asignar con estos criterios.</div>`;
+    return;
+  }
 
-        const opcionesTecnicos = tecnicos.map(tec => `<option value="${tec.id_usuario}">${tec.username}</option>`).join('');
-
-        return `<div class="ticket-card-tecnico ${prio}">
-            <div class="ticket-card-header">
-                <span class="id-box">#${t.id_ticket}</span>
-                <span class="badge ${prio}">${prio.toUpperCase()}</span>
-            </div>
-            <div class="ticket-card-body">
-                <h3>${t.titulo}</h3>
-                <div class="ticket-card-meta">
-                    <div><i class="fa-solid fa-user"></i> <span><strong>Solicitante:</strong> ${creadorNombre}</span></div>
-                    <div><i class="fa-solid fa-building"></i> <span><strong>Área:</strong> ${creadorArea}</span></div>
-                    <div><i class="fa-solid fa-calendar-days"></i> <span><strong>Fecha:</strong> ${fechaFormateada}</span></div>
-                </div>
-            </div>
-            <div class="footer-asignar">
-                <label class="lbl-asignar">Asignar Técnico Responsable:</label>
-                <div class="flex-gap-8">
-                    <select id="sel-${t.id_ticket}" class="select-tech-custom select-designar">
-                        <option value="">-- Seleccionar Técnico --</option>
-                        ${opcionesTecnicos}
-                    </select>
-                    <button class="btn-tomar-ticket btn-confirm-assign" title="Confirmar Asignación" onclick="procesarAsignacionAdmin(${t.id_ticket})"><i class="fa-solid fa-check"></i></button>
-                    <button class="btn-ver-ticket" title="Ver Detalles Completo" onclick="verDetalleTicketAdmin(${t.id_ticket})"><i class="fa-solid fa-eye"></i></button>
-                </div>
-            </div>
-        </div>`;
-    }).join('');
+  contenedor.innerHTML = asignables.map(t => {
+    const prio = prioridadKey(t.prioridad);
+    const selectedIds = String(t.tecnicos_asignados_ids || "").split(",").filter(Boolean);
+    const opcionesTecnicos = tecnicos.map(tec => {
+      const checked = selectedIds.includes(String(tec.id_usuario)) ? "checked" : "";
+      return `<label class="tech-check ${checked ? "selected" : ""}">
+        <input type="checkbox" data-ticket-tecnico="${t.id_ticket}" value="${tec.id_usuario}" ${checked}>
+        <span><i class="fa-solid fa-user-gear"></i> ${escapeHtml(tec.username)}</span>
+      </label>`;
+    }).join("");
+    const opcionesAreas = areasGlobales.map(area => `<option value="${area.id_area}" ${String(area.id_area) === String(t.id_area_admin || t.id_area || "") ? "selected" : ""}>${escapeHtml(area.nombre_area)}</option>`).join("");
+    return `<div class="ticket-card-tecnico ${prio.replace(/\s+/g, "-")}">
+      <div class="ticket-card-header"><span class="id-box">#${t.id_ticket}</span><span class="badge ${prio.replace(/\s+/g, "-")}">${escapeHtml(prioridadLabel(t.prioridad))}</span></div>
+      <div class="ticket-card-body">
+        <h3>${escapeHtml(t.titulo)}</h3>
+        <div class="ticket-card-meta">
+          <div><i class="fa-solid fa-user"></i> <span><strong>Solicitante:</strong> ${escapeHtml(t.usuario_creador || "N/A")}</span></div>
+          <div><i class="fa-solid fa-building"></i> <span><strong>Área admin:</strong> ${escapeHtml(t.nombre_area_admin || t.nombre_area || "Sin definir")}</span></div>
+          <div><i class="fa-solid fa-users-gear"></i> <span><strong>Técnicos:</strong> ${escapeHtml(t.tecnicos_asignados || "Sin asignar")}</span></div>
+          ${Number(t.total_tecnicos || 0) > 1 ? `<div><i class="fa-solid fa-list-check"></i> <span><strong>Avance:</strong> ${Number(t.tecnicos_resueltos || 0)}/${Number(t.total_tecnicos || 0)} resueltos</span></div>` : ""}
+          <div><i class="fa-solid fa-calendar-days"></i> <span><strong>Fecha:</strong> ${t.fecha_creacion ? new Date(t.fecha_creacion).toLocaleString() : "S/F"}</span></div>
+        </div>
+      </div>
+      <div class="footer-asignar">
+        <label class="lbl-asignar">Área definida por el administrador:</label>
+        <select id="area-${t.id_ticket}" class="select-tech-custom select-designar"><option value="">-- Seleccionar Área --</option>${opcionesAreas}</select>
+        <label class="lbl-asignar">Prioridad evaluada por el administrador:</label>
+        <select id="prioridad-${t.id_ticket}" class="select-tech-custom select-designar">${prioridadOptions(t.prioridad)}</select>
+        <label class="lbl-asignar">Asignar técnico(s):</label>
+        <div class="tech-picker">${opcionesTecnicos}</div>
+        <div class="flex-gap-8 assign-actions">
+          <button class="btn-enviar btn-assign-wide" title="Asignar técnicos" onclick="procesarAsignacionAdmin(${t.id_ticket})"><i class="fa-solid fa-user-check"></i> Asignar</button>
+          <button class="btn-ver-ticket" title="Ver detalle" onclick="verDetalleTicketAdmin(${t.id_ticket})"><i class="fa-solid fa-eye"></i></button>
+        </div>
+      </div>
+    </div>`;
+  }).join("");
 }
 
-// =========================================================================
-// GESTIÓN DE USUARIOS
-// =========================================================================
-function actualizarVistasGestion() { 
-    if(document.getElementById('count-usuarios')) document.getElementById('count-usuarios').innerText = usuariosGlobales.length; 
-    renderizarTablaUsuarios(usuariosGlobales); 
+window.abrirAsignacionAdmin = async function (id) {
+  const ticket = ticketsGlobales.find(t => Number(t.id_ticket) === Number(id));
+  if (!ticket) return;
+
+  const tecnicos = usuariosGlobales.filter(u => (u.role || u.rol || "").toLowerCase() === "tecnico");
+  const selectedIds = String(ticket.tecnicos_asignados_ids || "").split(",").filter(Boolean);
+  const areasHtml = areasGlobales.map(area => `<option value="${area.id_area}" ${String(area.id_area) === String(ticket.id_area_admin || ticket.id_area || "") ? "selected" : ""}>${escapeHtml(area.nombre_area)}</option>`).join("");
+  const tecnicosHtml = tecnicos.map(tec => `
+    <label class="swal-tech-check">
+      <input type="checkbox" value="${tec.id_usuario}" ${selectedIds.includes(String(tec.id_usuario)) ? "checked" : ""}>
+      <span>${escapeHtml(tec.username)}</span>
+    </label>`).join("");
+
+  const result = await themedSwal({
+    title: `Asignar técnicos #${id}`,
+    width: 500,
+    html: `
+      <label class="swal-label">Área definida por el administrador</label>
+      <select id="swal-area-admin" class="swal2-select">${areasHtml}</select>
+      <label class="swal-label">Prioridad evaluada por el administrador</label>
+      <select id="swal-prioridad-admin" class="swal2-select">${prioridadOptions(ticket.prioridad)}</select>
+      <label class="swal-label">Técnicos</label>
+      <div class="swal-tech-grid">${tecnicosHtml}</div>
+    `,
+    showCancelButton: true,
+    confirmButtonText: "Asignar",
+    cancelButtonText: "Cancelar",
+    preConfirm: () => {
+      const id_area_admin = document.getElementById("swal-area-admin").value;
+      const prioridad = document.getElementById("swal-prioridad-admin").value;
+      const id_tecnicos = [...document.querySelectorAll(".swal-tech-check input:checked")].map(input => input.value);
+      if (!id_area_admin) {
+        Swal.showValidationMessage("Selecciona el área");
+        return false;
+      }
+      if (id_tecnicos.length === 0) {
+        Swal.showValidationMessage("Selecciona al menos un técnico");
+        return false;
+      }
+      if (!prioridad) {
+        Swal.showValidationMessage("Selecciona la prioridad");
+        return false;
+      }
+      return { id_area_admin, id_tecnicos, prioridad };
+    }
+  });
+
+  if (!result.isConfirmed) return;
+
+  const res = await fetch(`/api/admin/tickets/${id}/asignar-multiple`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(result.value)
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    return toast("error", data.error || "No se pudo asignar el ticket");
+  }
+  await cargarDatosDesdeServidor();
+  toast("success", "Técnicos actualizados");
+};
+
+function actualizarVistasGestion() {
+  if ($("count-usuarios")) $("count-usuarios").innerText = usuariosGlobales.length;
+  renderizarTablaUsuarios(usuariosGlobales);
 }
 
 function filtrarUsuarios() {
-    const txt = document.getElementById('input-buscar').value.toLowerCase();
-    const rol = document.getElementById('filtro-rol').value;
-    renderizarTablaUsuarios(usuariosGlobales.filter(u => u.username.toLowerCase().includes(txt) && (rol === 'todos' || (u.role || u.rol || '').toLowerCase() === rol)));
+  const txt = ($("input-buscar")?.value || "").toLowerCase();
+  const rol = $("filtro-rol")?.value || "todos";
+  renderizarTablaUsuarios(usuariosGlobales.filter(u => (u.username || "").toLowerCase().includes(txt) && (rol === "todos" || (u.role || u.rol || "").toLowerCase() === rol)));
 }
 
 function renderizarTablaUsuarios(lista) {
-    const tbody = document.getElementById('tbody-usuarios');
-    if(!tbody) return;
-    tbody.innerHTML = lista.map(u => {
-        const uRol = (u.role || u.rol || 'usuario').toLowerCase();
-        const badgeClass = uRol === 'admin' ? 'pend' : (uRol === 'tecnico' ? 'cerr' : 'proc');
-        
-        return `<tr>
-            <td class="td-usuario-nombre">
-                <h4 style="margin:0">${u.username}</h4>
-            </td>
-            <td class="td-usuario-rol">
-                <span class="badge ${badgeClass}">${uRol.toUpperCase()}</span>
-            </td>
-            <td class="td-usuario-acciones">
-                <button class="btn-ver btn-rechazar" onclick="eliminarUsuario('${u.id_usuario}')">
-                    <i class="fa-solid fa-trash"></i>
-                </button>
-            </td>
-        </tr>`;
-    }).join('');
+  const tbody = $("tbody-usuarios");
+  if (!tbody) return;
+  tbody.innerHTML = lista.map(u => {
+    const uRol = (u.role || u.rol || "usuario").toLowerCase();
+    const badgeClass = uRol === "admin" ? "pend" : (uRol === "tecnico" ? "cerr" : "proc");
+    return `<tr>
+      <td class="td-usuario-nombre"><h4 style="margin:0">${escapeHtml(u.username)}</h4></td>
+      <td class="td-usuario-correo">${escapeHtml(u.correo || "Sin correo")}</td>
+      <td class="td-usuario-rol"><span class="badge ${badgeClass}">${uRol.toUpperCase()}</span></td>
+      <td class="td-usuario-acciones"><button class="btn-ver btn-rechazar" onclick="eliminarUsuario('${u.id_usuario}')" title="Eliminar"><i class="fa-solid fa-trash"></i></button></td>
+    </tr>`;
+  }).join("");
 }
 
-window.eliminarUsuario = async function(id) {
-    if(confirm('¿Eliminar usuario?')) { await fetch(`/api/usuarios/${id}`, { method: 'DELETE' }); cargarDatosDesdeServidor(); }
+window.eliminarUsuario = async function (id) {
+  const result = await confirmBox("Eliminar usuario", "Esta acción borrará la cuenta seleccionada.");
+  if (!result.isConfirmed) return;
+  try {
+    const res = await fetch(`/api/usuarios/${id}`, { method: "DELETE" });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || "No se pudo eliminar el usuario");
+
+    usuariosGlobales = usuariosGlobales.filter(u => String(u.id_usuario) !== String(id));
+    actualizarVistasGestion();
+    cargarTecnicosEnSelect();
+    toast("success", "Usuario eliminado");
+  } catch (err) {
+    if (window.Swal) themedSwal({ icon: "error", title: "No se pudo eliminar", text: err.message });
+    else alert(err.message);
+  }
 };
 
 function cargarTecnicosEnSelect() {
-    const select = document.getElementById('select-filtro-tecnico');
-    if (!select) return;
-    select.innerHTML = '<option value="todos">Todos los técnicos</option>' + usuariosGlobales.filter(u => (u.role || u.rol || '').toLowerCase() === 'tecnico').map(t => `<option value="${t.id_usuario}">${t.username}</option>`).join('');
+  const select = $("select-filtro-tecnico");
+  if (!select) return;
+  select.innerHTML = '<option value="todos">Todos los técnicos</option>'
+    + usuariosGlobales.filter(u => (u.role || u.rol || "").toLowerCase() === "tecnico").map(t => `<option value="${t.id_usuario}">${escapeHtml(t.username)}</option>`).join("");
 }
 
-// =========================================================================
-// CENTRO DE ANÁLISIS (DASHBOARD AVANZADO)
-// =========================================================================
-function renderizarCentroAnalisis() { 
-    const idTec = document.getElementById('select-filtro-tecnico').value;
-    const data = idTec === 'todos' ? ticketsGlobales : ticketsGlobales.filter(t => t.id_tecnico_asignado == idTec);
-    const stats = { 
-        pend: data.filter(t => (t.estado || '').toLowerCase().trim() === 'pendiente').length, 
-        proc: data.filter(t => (t.estado || '').toLowerCase().trim() === 'en proceso').length, 
-        resu: data.filter(t => (t.estado || '').toLowerCase().trim() === 'resuelto').length, 
-        cerr: data.filter(t => (t.estado || '').toLowerCase().trim() === 'cerrado').length 
-    };
-    
-    ['kpiAsignados-analisis', 'kpiProceso-analisis', 'kpiResueltos-analisis', 'kpiCerrados-analisis'].forEach((id, i) => { if(document.getElementById(id)) document.getElementById(id).innerText = [stats.pend, stats.proc, stats.resu, stats.cerr][i]; });
-    
-    if (charts.estado) charts.estado.destroy();
-    if (charts.prioridad) charts.prioridad.destroy();
+function renderizarCentroAnalisis() {
+  const selectTecnico = $("select-filtro-tecnico");
+  const idTec = selectTecnico?.value || "todos";
+  const data = idTec === "todos"
+    ? ticketsGlobales
+    : ticketsGlobales.filter(t => String(t.id_tecnico_asignado) === String(idTec) || (t.tecnicos_asignados || "").includes(usuariosGlobales.find(u => String(u.id_usuario) === String(idTec))?.username || "\u0000"));
+  const stats = {
+    pend: data.filter(t => estadoClean(t) === "pendiente").length,
+    proc: data.filter(t => estadoClean(t) === "en proceso").length,
+    esp: data.filter(t => estadoClean(t) === "en espera").length,
+    resu: data.filter(t => estadoClean(t) === "resuelto").length,
+    cerr: data.filter(t => estadoClean(t) === "cerrado").length
+  };
 
-    charts.estado = new Chart(document.getElementById('chartEstados').getContext('2d'), { type: 'pie', data: { labels: ['Pendiente', 'En Proceso', 'Resuelto', 'Cerrado'], datasets: [{ data: [stats.pend, stats.proc, stats.resu, stats.cerr], backgroundColor: ['#f39c12', '#3498db', '#2ecc71', '#95a5a6'] }] } });
-charts.prioridad = new Chart(document.getElementById('chartPrioridades').getContext('2d'), { type: 'bar', data: { labels: ['Alta', 'Media', 'Baja'], datasets: [{ label: 'Prioridad', data: ['Alta', 'Media', 'Baja'].map(p => data.filter(t => (t.prioridad || '').toLowerCase().trim() === p.toLowerCase()).length), backgroundColor: ['#e74c3c', '#f1c40f', '#0bdaad'] }] }, options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } } });
+  [["kpiAsignados-analisis", stats.pend], ["kpiProceso-analisis", stats.proc], ["kpiEspera-analisis", stats.esp], ["kpiResueltos-analisis", stats.resu], ["kpiCerrados-analisis", stats.cerr]]
+    .forEach(([id, val]) => { if ($(id)) $(id).innerText = val; });
+
+  if (!$("chartEstados") || !$("chartPrioridades") || !window.Chart) return;
+  if (charts.estado) charts.estado.destroy();
+  if (charts.prioridad) charts.prioridad.destroy();
+  charts.estado = new Chart($("chartEstados").getContext("2d"), {
+    type: "pie",
+    data: { labels: ["Pendiente", "En Proceso", "Resuelto", "Cerrado"], datasets: [{ data: [stats.pend, stats.proc, stats.resu, stats.cerr], backgroundColor: ["#f39c12", "#3498db", "#2ecc71", "#95a5a6"] }] }
+  });
+  charts.prioridad = new Chart($("chartPrioridades").getContext("2d"), {
+    type: "bar",
+    data: { labels: ["Critica", "Alta", "Media", "Baja", "Sin evaluar"], datasets: [{ label: "Prioridad", data: ["critica", "alta", "media", "baja", "sin evaluar"].map(p => data.filter(t => prioridadKey(t.prioridad) === p).length), backgroundColor: ["#ff4d4d", "#e74c3c", "#f1c40f", "#0bdaad", "#8e94a9"] }] },
+    options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+  });
 }
 
+window.renderizarTablasDashboard = renderizarTablasDashboard;
+window.renderizarCentroAnalisis = renderizarCentroAnalisis;
 setInterval(cargarDatosDesdeServidor, 30000);

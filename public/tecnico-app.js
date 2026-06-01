@@ -1,327 +1,405 @@
-// public/tecnico-app.js
-
 let ticketsGlobales = [];
 
+const $ = id => document.getElementById(id);
+const detail = window.ServiHelpTicketDetail;
+const swalEstilo = {
+    buttonsStyling: false, // Desactiva los estilos intrusivos de Swal
+    customClass: {
+        popup: 'mi-swal-popup',
+        confirmButton: 'btn-enviar', // Usa tu clase de CSS
+        cancelButton: 'btn-cancelar', // Usa tu clase de CSS
+        textarea: 'mi-swal-textarea'
+    }
+};
+const themedSwal = opts => Swal.fire({
+  ...swalEstilo,
+  ...opts,
+  customClass: { ...swalEstilo.customClass, ...(opts.customClass || {}) }
+});
+const toast = (icon, title) => window.Swal
+  ? themedSwal({ icon, title, timer: 1800, showConfirmButton: false })
+  : alert(title);
+  
+const askResolution = () => window.Swal
+  ? themedSwal({
+      ...swalEstilo,
+      title: "Registrar solución",
+      html: `
+        <label class="swal-label">Comentario para el usuario</label>
+        <textarea id="swal-solucion-comentario" class="mi-swal-textarea" placeholder="Describe la atención realizada"></textarea>
+        
+        <label class="swal-label">Evidencia de solución</label>
+        <input id="swal-solucion-evidencias" type="file" accept="image/*" multiple style="display: none;">
+        <label for="swal-solucion-evidencias" class="btn-subir-archivo">
+            <i class="fa-solid fa-cloud-arrow-up"></i> Subir máximo 5 imágenes
+        </label>
+        
+        <div id="preview-solucion"></div>
+      `,
+      didOpen: () => {
+        // Usamos exactamente los mismos nombres y lógica que en Poner en Espera
+        const input = document.getElementById("swal-solucion-evidencias");
+        const preview = document.getElementById("preview-solucion");
+
+        input.addEventListener("change", () => {
+          const archivos = [...input.files].slice(0, 5).map(file => URL.createObjectURL(file));
+          // LLAMADA EXACTAMENTE IGUAL A LA QUE YA TE FUNCIONA
+          window.ServiHelpTicketDetail.renderCarousel(preview, archivos, "Sin evidencias");
+        });
+      },
+      preConfirm: () => {
+        const comentario = document.getElementById("swal-solucion-comentario").value.trim();
+        const files = [...document.getElementById("swal-solucion-evidencias").files];
+        if (!comentario) {
+          Swal.showValidationMessage("Escribe un comentario");
+          return false;
+        }
+        if (files.length > 5) {
+          Swal.showValidationMessage("Solo puedes adjuntar máximo 5 imágenes");
+          return false;
+        }
+        return { comentario, files };
+      },
+      showCancelButton: true,
+      confirmButtonText: "Guardar",
+      cancelButtonText: "Cancelar"
+    })
+  : Promise.resolve({ isConfirmed: true, value: { comentario: prompt("Describe la atención realizada"), files: [] } });
+  
+const askHoldReason = () => window.Swal
+  ? themedSwal({
+      ...swalEstilo,
+      title: "Poner atención en espera",
+      html: `
+        <label class="swal-label">Motivo de espera</label>
+        <textarea id="swal-espera-motivo" class="mi-swal-textarea" placeholder="Ej. Falta pieza, falta autorización..."></textarea>
+        
+        <label class="swal-label">Evidencia de espera</label>
+        <input id="swal-espera-evidencias" type="file" accept="image/*" multiple style="display: none;">
+        <label for="swal-espera-evidencias" class="btn-subir-archivo">
+           <i class="fa-solid fa-cloud-arrow-up"></i> Subir máximo 5 imágenes
+        </label>
+        <div id="preview-espera"></div>
+      `,
+      didOpen: () => {
+        const input = document.getElementById("swal-espera-evidencias");
+        const preview = document.getElementById("preview-espera");
+
+        input.addEventListener("change", () => {
+          const archivos = [...input.files].slice(0, 5).map(file => URL.createObjectURL(file));
+          window.ServiHelpTicketDetail.renderCarousel(preview, archivos, "Sin evidencias");
+        });
+      },
+      preConfirm: () => {
+        const motivo = document.getElementById("swal-espera-motivo").value.trim();
+        const files = [...document.getElementById("swal-espera-evidencias").files];
+        
+        if (!motivo) {
+          Swal.showValidationMessage("El motivo es obligatorio");
+          return false;
+        }
+        return { motivo, files };
+      },
+      showCancelButton: true,
+      confirmButtonText: "Guardar espera",
+      cancelButtonText: "Cancelar"
+    })
+  : Promise.resolve({ isConfirmed: true, value: { motivo: prompt("Motivo de espera"), files: [] } });
+const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, c => ({
+  "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+}[c]));
+const urlArchivo = archivo => archivo?.startsWith("/uploads/") ? archivo : `/uploads/${archivo}`;
+
 document.addEventListener("DOMContentLoaded", () => {
-    // 1. EVENTOS DE NAVEGACIÓN
-    document.getElementById('nav-dashboard')?.addEventListener('click', mostrarDashboard);
-    document.getElementById('nav-disponibles')?.addEventListener('click', mostrarDisponibles);
-    
-    // --- CAMBIO AQUÍ: ELIMINAMOS btnFiltrar Y ACTIVAMOS LOS SELECTS ---
-    
-    // Input de búsqueda: responde al escribir
-    document.getElementById('busqueda')?.addEventListener('input', renderizarTablasDashboard);
-    
-    // Selects: responden al cambiar (change)
-    document.getElementById('filtroEstado')?.addEventListener('change', renderizarTablasDashboard);
-    document.getElementById('filtroTipo')?.addEventListener('change', renderizarTablasDashboard);
-    document.getElementById('filtroPrioridad')?.addEventListener('change', renderizarTablasDashboard);
-    
-    // Filtro de disponibles: responde al cambiar
-    document.getElementById('filtro-prioridad-disponibles')?.addEventListener('change', renderizarCardsDisponibles);
-    
-    // Otros eventos
-    document.getElementById('btn-cerrar-modal-tecnico-footer')?.addEventListener('click', cerrarModalTecnico);
-    
-    document.getElementById('logout-btn')?.addEventListener('click', async () => {
-        const res = await fetch('/logout', { method: 'POST' });
-        if (res.ok) window.location.href = '/';
-    });
+  detail?.initNotificationBell?.();
+  $("nav-dashboard")?.addEventListener("click", mostrarDashboard);
+  $("nav-disponibles")?.addEventListener("click", mostrarDisponibles);
+  $("busqueda")?.addEventListener("input", renderizarTablasDashboard);
+  $("filtroEstado")?.addEventListener("change", renderizarTablasDashboard);
+  $("filtroTipo")?.addEventListener("change", renderizarTablasDashboard);
+  $("filtroPrioridad")?.addEventListener("change", renderizarTablasDashboard);
+  $("filtro-prioridad-disponibles")?.addEventListener("change", renderizarCardsDisponibles);
+  $("btn-cerrar-modal-tecnico-footer")?.addEventListener("click", cerrarModalTecnico);
+  $("logout-btn")?.addEventListener("click", async () => {
+    const res = await fetch("/logout", { method: "POST" });
+    if (res.ok) window.location.href = "/";
+  });
 
-    sincronizarConServidor();
-
-    setInterval(() => {
-        sincronizarConServidor();
-    }, 15000);
+  sincronizarConServidor();
+  setInterval(sincronizarConServidor, 15000);
 });
 
 async function sincronizarConServidor() {
-    try {
-        const res = await fetch('/api/tickets');
-        if (!res.ok) throw new Error('Error al conectar con la base de datos');
-        ticketsGlobales = await res.json();
-        inicializarPanelTecnico();
-    } catch (err) {
-        console.error("Error en sincronización:", err);
-    }
+  try {
+    const res = await fetch("/api/tickets");
+    if (!res.ok) throw new Error("Error al conectar con la base de datos");
+    ticketsGlobales = await res.json();
+    inicializarPanelTecnico();
+  } catch (err) {
+    console.error("Error en sincronización:", err);
+  }
 }
 
 function inicializarPanelTecnico() {
-    const miId = String(window.currentUserId || '').trim();
-    if (!miId) return;
+  const contadores = { espera: 0, asignados: 0, proceso: 0, resueltos: 0, cerrados: 0 };
+  
+  ticketsGlobales.forEach(t => {
+    const est = (t.estado || "").toLowerCase().trim();
+    const estAsignacion = (t.estado_asignacion || "").toLowerCase().trim();
 
-    let contadores = { asignados: 0, proceso: 0, resueltos: 0, cerrados: 0 };
+    if (est === "cerrado") {
+      contadores.cerrados++;
+    } 
+    else if (estAsignacion === "asignado") {
+      contadores.asignados++;
+    }
+    else if (estAsignacion === "en espera") {
+      contadores.espera++;
+    }
+    else if (estAsignacion === "en proceso" || est === "en proceso") {
+      contadores.proceso++;
+    }
+    else if (estAsignacion === "resuelto" || est === "resuelto") {
+      contadores.resueltos++;
+    }
+  });
 
-    ticketsGlobales.forEach(t => {
-        const estClean = (t.estado || '').toLowerCase().trim();
-        const idTecnico = String(t.id_tecnico_asignado || '').trim();
-        
-        // --- AQUÍ ESTÁ EL CAMBIO ---
-        // Contamos como "Asignado" TODO ticket que tenga TU ID
-        // y que aún esté en estado 'pendiente' (que el Admin te mandó pero aún no tocas)
-        if (idTecnico === miId && estClean === 'pendiente') {
-            contadores.asignados++;
-        }
-
-        // Tus tickets que ya estás trabajando
-        if (idTecnico === miId) {
-            if (estClean === 'en proceso') contadores.proceso++;
-            else if (estClean === 'resuelto') contadores.resueltos++;
-            else if (estClean === 'cerrado') contadores.cerrados++;
-        }
-    });
-
-    // Actualizar el DOM
-    if (document.getElementById('kpiAsignados')) document.getElementById('kpiAsignados').innerText = contadores.asignados;
-    if (document.getElementById('kpiProceso')) document.getElementById('kpiProceso').innerText = contadores.proceso;
-    if (document.getElementById('kpiResueltos')) document.getElementById('kpiResueltos').innerText = contadores.resueltos;
-    if (document.getElementById('kpiCerrados')) document.getElementById('kpiCerrados').innerText = contadores.cerrados;
-
-    renderizarTablasDashboard();
-    renderizarCardsDisponibles();
+  $("kpiAsignados").innerText = contadores.asignados;
+  $("kpiProceso").innerText = contadores.proceso;
+  $("kpiEspera").innerText = contadores.espera;
+  $("kpiResueltos").innerText = contadores.resueltos;
+  if ($("kpiCerrados")) $("kpiCerrados").innerText = contadores.cerrados;
+  
+  renderizarTablasDashboard();
+  renderizarCardsDisponibles();
 }
-
-// --- RENDERIZADO ESTILIZADO ---
 
 function renderizarTablasDashboard() {
-    const tbody = document.getElementById('tbody-resumen-mis-tickets');
-    if (!tbody) return;
-    tbody.innerHTML = '';
+  const tbody = $("tbody-resumen-mis-tickets");
+  if (!tbody) return;
 
-    // 1. Captura de filtros
-    const busqueda = document.getElementById('busqueda')?.value.toLowerCase() || '';
-    const filtroEstado = document.getElementById('filtroEstado')?.value || 'Todos';
-    const filtroTipo = document.getElementById('filtroTipo')?.value || 'Todos';
-    const filtroPrioridad = document.getElementById('filtroPrioridad')?.value || 'Todos';
+  const busqueda = ($("busqueda")?.value || "").toLowerCase();
+  const filtroEstado = $("filtroEstado")?.value || "Todos";
+  const filtroTipo = $("filtroTipo")?.value || "Todos";
+  const filtroPrioridad = $("filtroPrioridad")?.value || "Todos";
 
-    // 2. Procesamiento (Filtramos solo lo que te pertenece a ti)
-// ... dentro de la función renderizarTablasDashboard ...
+  const misTickets = ticketsGlobales.filter(t => {
+    const prioTexto = (t.prioridad || "media").toLowerCase().trim();
+    const tipoAutomatico = ["alta", "critica"].includes(prioTexto) ? "INC" : "REQ";
+    const est = (t.estado || "").toLowerCase().trim();
+    const estAsignacion = (t.estado_asignacion || "").toLowerCase().trim();
+    return (t.titulo || "").toLowerCase().includes(busqueda)
+      && estAsignacion !== "asignado"
+      && (filtroEstado === "Todos" || t.estado === filtroEstado)
+      && (filtroPrioridad === "Todos" || t.prioridad === filtroPrioridad)
+      && (filtroTipo === "Todos" || tipoAutomatico === filtroTipo);
+  });
 
-// 2. Procesamiento (Filtramos solo lo que te pertenece a ti)
-const misTickets = ticketsGlobales.filter(t => {
-    // 1. Solo tus tickets
-    const esMio = String(t.id_tecnico_asignado) === String(window.currentUserId);
-    
-    // 2. Calculamos el tipo tal cual lo hacemos al renderizar (INC si es alta, sino REQ)
-    const prioTexto = (t.prioridad || '').toLowerCase().trim();
-    const tipoAutomatico = (prioTexto === 'alta') ? 'INC' : 'REQ';
+  tbody.innerHTML = misTickets.map(t => {
+    const prioTexto = (t.prioridad || "media").toLowerCase().trim();
+    const tipoAutomatico = ["alta", "critica"].includes(prioTexto) ? "INC" : "REQ";
+    const claseTipo = tipoAutomatico === "INC" ? "inc" : "req";
+  
+    const estGlobal = (t.estado || "").toLowerCase().trim();
+    const estAsignacion = (t.estado_asignacion || "").toLowerCase().trim();
+  
+const estadoFinal = estGlobal === "cerrado" ? "cerrado" : estAsignacion;
 
-    // 3. Filtros
-    const busqueda = document.getElementById('busqueda')?.value.toLowerCase() || '';
-    const filtroEstado = document.getElementById('filtroEstado')?.value || 'Todos';
-    const filtroTipo = document.getElementById('filtroTipo')?.value || 'Todos'; // Este es el que viene de tu select
-    const filtroPrioridad = document.getElementById('filtroPrioridad')?.value || 'Todos';
+const badgeClase = estadoFinal === "en proceso" ? "proc" : 
+                       (estadoFinal === "cerrado" ? "cerr" : 
+                       (estadoFinal === "resuelto" ? "resuel" : 
+                       (estadoFinal === "en espera" ? "espera" : "pend")));
 
-    const coincideBusqueda = (t.titulo || '').toLowerCase().includes(busqueda);
-    const coincideEstado = (filtroEstado === 'Todos' || t.estado === filtroEstado);
-    const coincidePrioridad = (filtroPrioridad === 'Todos' || t.prioridad === filtroPrioridad);
-    
-    // --- AQUÍ ESTÁ LA CLAVE: Comparamos el tipo calculado con la selección ---
-    const coincideTipo = (filtroTipo === 'Todos' || tipoAutomatico === filtroTipo);
+const icon = estadoFinal === "en proceso" ? "fa-spinner fa-spin" : 
+                 (estadoFinal === "resuelto" ? "fa-circle-check" : 
+                 (estadoFinal === "cerrado" ? "fa-lock" : 
+                 (estadoFinal === "en espera" ? "fa-clock" : "fa-circle-dot")));
 
-    return esMio && coincideBusqueda && coincideEstado && coincidePrioridad && coincideTipo;
-});
+    const totalTecnicos = Number(t.total_tecnicos || 0);
+    const resueltosTecnicos = Number(t.tecnicos_resueltos || 0);
+    const avanceTecnico = totalTecnicos > 1 ? `<div class="ticket-fecha-tabla">Avance tecnico: ${resueltosTecnicos}/${totalTecnicos}</div>` : "";
 
-    // 3. Renderizado (Usando el diseño que tienes en el Admin)
-// ... dentro del map de renderizarTablasDashboard ...
-tbody.innerHTML = misTickets.map(t => {
-    // --- COPIA ESTO ---
-    const prioTexto = (t.prioridad || '').toLowerCase().trim();
-    const tipoAutomatico = (prioTexto === 'alta') ? 'INC' : 'REQ';
-    const claseTipo = (tipoAutomatico === 'INC') ? 'inc' : 'req';
-    // ------------------
-
-    const est = (t.estado || '').toLowerCase().trim();
-    const badgeClase = est === 'en proceso' ? 'proc' : 
-                       (est === 'cerrado' ? 'cerr' : 
-                       (est === 'resuelto' ? 'resuel' : 'pend'));
-    
-    const icon = est === 'en proceso' ? 'fa-spinner fa-spin' : 
-                 (est === 'resuelto' ? 'fa-circle-check' : 
-                 (est === 'cerrado' ? 'fa-lock' : 'fa-circle-dot'));
-
-    return `<tr>
-        <td><span class="id-text">#${t.id_ticket}</span></td>
-        <td><span class="tag-ticket ${claseTipo}">${tipoAutomatico}</span></td>
-        <td>
-            <div class="ticket-asunto-principal">${t.titulo}</div>
-            <div class="ticket-fecha-tabla"><i class="fa-solid fa-calendar-days"></i> ${new Date(t.fecha_creacion).toLocaleDateString()}</div>
-        </td>
-        <td><strong class="solicitante-text">${t.usuario_creador || 'N/A'}</strong></td>
-        <td><span class="badge ${t.prioridad.toLowerCase()}">${t.prioridad.toUpperCase()}</span></td>
-        <td>
-            <span class="badge ${badgeClase}">
-                <i class="fa-solid ${icon}"></i> ${t.estado}
-            </span>
-        </td>
-        <td>
-            <div class="flex-gap-8">
-                <button class="btn-ver-ticket" onclick="verDetalleTicketTecnico(${t.id_ticket})" title="Ver detalles">
-                    <i class="fa-solid fa-eye"></i>
-                </button>
-                ${est === 'en proceso' ? `
-                <button class="btn-aprobar" onclick="marcarComoResuelto(${t.id_ticket})" title="Marcar como Resuelto">
-                    <i class="fa-solid fa-check"></i>
-                </button>` : ''}
-            </div>
-        </td>
+   return `<tr>
+      <td data-label="ID"><span class="id-text">#${t.id_ticket}</span></td>
+      <td data-label="Tipo"><span class="tag-ticket ${claseTipo}">${tipoAutomatico}</span></td>
+      <td data-label="Asunto">
+        <div class="ticket-asunto-principal">${escapeHtml(t.titulo)}</div>
+        <div class="ticket-fecha-tabla"><i class="fa-solid fa-calendar-days"></i> ${t.fecha_creacion ? new Date(t.fecha_creacion).toLocaleString() : "S/F"}</div>
+        ${avanceTecnico}
+      </td>
+      <td data-label="Solicitante"><strong class="solicitante-text">${escapeHtml(t.usuario_creador || "N/A")}</strong></td>
+      <td data-label="Prioridad"><span class="badge ${prioTexto}">${escapeHtml(t.prioridad || "Media").toUpperCase()}</span></td>
+      
+      <td data-label="Estado"><span class="badge ${badgeClase}"><i class="fa-solid ${icon}"></i> ${escapeHtml(estadoFinal.charAt(0).toUpperCase() + estadoFinal.slice(1))}</span></td>
+      
+      <td data-label="Acciones">
+        <button class="btn-ver-ticket" onclick="verDetalleTicketTecnico(${t.id_ticket})" title="Ver detalles">
+          <i class="fa-solid fa-eye"></i>
+        </button>
+      </td>
     </tr>`;
-}).join('');
+  }).join("");
 
-    if (misTickets.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;">No se encontraron tickets con esos filtros.</td></tr>`;
-    }
+  if (misTickets.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" class="table-empty-message">No se encontraron tickets con esos filtros.</td></tr>`;
+  }
 }
 
-// =========================================================================
-// RENDERIZADO DE CARDS DISPONIBLES (DISEÑO IGUAL AL CÓDIGO DE REFERENCIA)
-// =========================================================================
 function renderizarCardsDisponibles() {
-    const contenedorCards = document.getElementById('contenedor-cards-disponibles');
-    const badgeContador = document.getElementById('badge-contador-disponibles');
-    if (!contenedorCards) return;
-    
-    contenedorCards.innerHTML = '';
+  const contenedorCards = $("contenedor-cards-disponibles");
+  const badgeContador = $("badge-contador-disponibles");
+  if (!contenedorCards) return;
 
-    const filtroPrioridad = document.getElementById('filtro-prioridad-disponibles')?.value || 'todos';
-    let contadorVisibles = 0;
+  const filtroPrioridad = $("filtro-prioridad-disponibles")?.value || "todos";
+  const ticketsParaTi = ticketsGlobales.filter(t => (t.estado_asignacion || "").toLowerCase().trim() === "asignado");
+  if (badgeContador) badgeContador.innerText = `${ticketsParaTi.length} tickets en asignación`;
 
-    const ticketsParaTi = ticketsGlobales.filter(t => {
-        const estClean = (t.estado || '').toLowerCase().trim();
-        const idTecnico = String(t.id_tecnico_asignado || '').trim();
-        return idTecnico === String(window.currentUserId) && estClean === 'pendiente';
-    });
+  const visibles = ticketsParaTi.filter(t => filtroPrioridad === "todos" || (t.prioridad || "media").toLowerCase().trim() === filtroPrioridad);
+  contenedorCards.innerHTML = visibles.map(t => {
+    const prioLower = (t.prioridad || "media").toLowerCase().trim();
+    return `<div class="ticket-card-tecnico ${prioLower}">
+      <div class="ticket-card-header">
+        <span class="id-box">#${t.id_ticket}</span>
+        <span class="badge ${prioLower}">${escapeHtml(t.prioridad || "Media").toUpperCase()}</span>
+      </div>
+      <div class="ticket-card-body">
+        <h3>${escapeHtml(t.titulo || "Sin Asunto")}</h3>
+        <div class="ticket-card-meta">
+          <div><i class="fa-solid fa-user"></i> <span><strong>Solicitante:</strong> ${escapeHtml(t.usuario_creador || "Cliente General")}</span></div>
+          <div><i class="fa-solid fa-building"></i> <span><strong>Área:</strong> ${escapeHtml(t.nombre_area_admin || t.nombre_area || "General")}</span></div>
+          <div><i class="fa-solid fa-calendar-days"></i> <span><strong>Creado: </strong> ${t.fecha_creacion ? new Date(t.fecha_creacion).toLocaleString() : "S/F"}</span></div>
+        </div>
+      </div>
+      <div class="ticket-card-footer footer-asignar">
+        <button class="btn-tomar-ticket action-accept-btn" onclick="aceptarTicket(${t.id_ticket})" title="Aceptar Ticket">
+          <i class="fa-solid fa-check"></i>
+        </button>
+        <button class="btn-ver-ticket action-preview-btn" onclick="verDetalleTicketTecnico(${t.id_ticket})" title="Ver detalles">
+          <i class="fa-solid fa-eye"></i>
+        </button>
+      </div>
+    </div>`;
+  }).join("");
 
-    if (badgeContador) {
-        badgeContador.innerText = `${ticketsParaTi.length} tickets en asignación`;
-    }
-
-    ticketsParaTi.forEach(t => {
-        const prioLower = (t.prioridad || 'baja').toLowerCase().trim();
-        if (filtroPrioridad !== 'todos' && prioLower !== filtroPrioridad) return;
-
-        contadorVisibles++;
-        
-        const fechaFormateada = t.fecha_creacion ? new Date(t.fecha_creacion).toLocaleDateString() : 'N/A';
-        const areaMostrada = t.nombre_area || 'General';
-
-        const card = document.createElement('div');
-        card.className = `ticket-card-tecnico ${prioLower}`;
-        
-        // HTML LIMPIO Y SIN COMENTARIOS DENTRO
-        card.innerHTML = `
-            <div class="ticket-card-header">
-                <span class="id-box">#${t.id_ticket}</span>
-                <span class="badge ${prioLower}">${t.prioridad.toUpperCase()}</span>
-            </div>
-            <div class="ticket-card-body">
-                <h3>${t.titulo || 'Sin Asunto'}</h3>
-                <div class="ticket-card-meta">
-                    <div><i class="fa-solid fa-user"></i> <span><strong>Solicitante:</strong> ${t.usuario_creador || 'Cliente General'}</span></div>
-                    <div><i class="fa-solid fa-building"></i> <span><strong>Área:</strong> ${areaMostrada}</span></div>
-                    <div><i class="fa-solid fa-calendar-days"></i> <span><strong>Fecha:</strong> ${fechaFormateada}</span></div>
-                </div>
-            </div>
-            <div class="ticket-card-footer footer-asignar">
-                <button class="btn-tomar-ticket action-accept-btn" onclick="aceptarTicket(${t.id_ticket})" title="Aceptar Ticket">
-                    <i class="fa-solid fa-check"></i>
-                </button>
-                <button class="btn-ver-ticket action-preview-btn" onclick="verDetalleTicketTecnico(${t.id_ticket})" title="Ver detalles">
-                    <i class="fa-solid fa-eye"></i>
-                </button>
-            </div>
-        `;
-        contenedorCards.appendChild(card);
-    });
-
-    if (contadorVisibles === 0) {
-        contenedorCards.innerHTML = `<div class="no-tickets-alert">🔍 Tu bandeja está limpia. No tienes tickets en asignación.</div>`;
-    }
+  if (visibles.length === 0) {
+    contenedorCards.innerHTML = `<div class="no-tickets-alert">Tu bandeja está limpia. No tienes tickets en asignación.</div>`;
+  }
 }
 
 async function aceptarTicket(idTicket) {
-    try {
-        const res = await fetch(`/api/tecnico/tickets/${idTicket}/aceptar-asignacion`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' }
-        });
-
-        if (res.ok) {
-            // 1. Recargamos los datos desde la BD para que el ticket
-            // ya no aparezca como "pendiente" en los disponibles
-            await sincronizarConServidor(); 
-            
-            // 2. Opcional: avisar al usuario
-            console.log("Ticket aceptado correctamente");
-        } else {
-            alert("Error al intentar aceptar el ticket.");
-        }
-    } catch (error) {
-        console.error("Error de conexión:", error);
-    }
+  const res = await fetch(`/api/tecnico/tickets/${idTicket}/aceptar-asignacion`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" }
+  });
+  if (!res.ok) return toast("error", "Error al intentar aceptar el ticket");
+  await sincronizarConServidor();
+  toast("success", "Ticket aceptado");
 }
 
 async function marcarComoResuelto(idTicket) {
-    try {
-        const res = await fetch(`/api/tecnico/tickets/${idTicket}/estado`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ nuevoEstado: 'Resuelto' })
-        });
-        
-        if (res.ok) {
-            cerrarModalTecnico();
-            // Esto fuerza a que se vuelvan a pedir los datos al servidor
-            await sincronizarConServidor(); 
-            // Opcional: mostrar un mensaje de éxito
-            console.log("Ticket actualizado correctamente");
-        } else {
-            console.error("El servidor no pudo actualizar el estado");
-        }
-    } catch (error) {
-        console.error("Error de conexión:", error);
-    }
+  const result = await askResolution();
+  if (!result.isConfirmed) return;
+
+  const body = new FormData();
+  body.append("nuevoEstado", "Resuelto");
+  body.append("comentario", result.value.comentario);
+  result.value.files.forEach(file => body.append("evidencias", file));
+
+  const res = await fetch(`/api/tecnico/tickets/${idTicket}/estado`, {
+    method: "PUT",
+    body
+  });
+
+  if (!res.ok) return toast("error", "El servidor no pudo actualizar el estado");
+  cerrarModalTecnico();
+  await sincronizarConServidor();
+  toast("success", "Solución registrada");
 }
 
-// --- MODAL ESTILIZADO ---
+async function ponerEnEspera(idTicket) {
+  const result = await askHoldReason();
+  if (!result.isConfirmed) return;
 
-function verDetalleTicketTecnico(idTicket) {
-    const ticket = ticketsGlobales.find(t => t.id_ticket === idTicket);
-    if (!ticket) return;
+  const body = new FormData();
+  body.append("nuevoEstado", "En Espera");
+  body.append("motivo", result.value.motivo); // Usamos el motivo del objeto
+  result.value.files.forEach(file => body.append("evidencias", file)); // Adjuntamos archivos
 
-    document.getElementById('m-id-ticket').innerText = `Detalle: #${ticket.id_ticket}`;
-    document.getElementById('m-descripcion-ticket').innerText = ticket.descripcion;
-    
-    const contenedorImagen = document.getElementById('m-evidencia-contenedor');
-    contenedorImagen.innerHTML = ticket.archivo ? 
-        `<img src="${ticket.archivo.startsWith('/uploads/') ? ticket.archivo : '/uploads/'+ticket.archivo}" class="evidence-img-fluid" style="cursor:pointer" onclick="window.open(this.src, '_blank')">` :
-        `<p class="evidence-empty">No hay evidencia.</p>`;
-    
-    const footer = document.getElementById('modal-ticket-tecnico-footer');
-    footer.querySelectorAll('.btn-resuelto').forEach(b => b.remove());
-    
-    if (ticket.estado === 'En Proceso') {
-        const btnResuelto = document.createElement('button');
-        btnResuelto.innerText = "Marcar como Resuelto";
-        btnResuelto.className = "btn-resuelto";
-        btnResuelto.onclick = () => marcarComoResuelto(ticket.id_ticket);
-        footer.insertBefore(btnResuelto, document.getElementById('btn-cerrar-modal-tecnico-footer'));
-    }
-    document.getElementById('modal-ticket-tecnico').classList.add('active');
+  const res = await fetch(`/api/tecnico/tickets/${idTicket}/estado`, {
+    method: "PUT",
+    body // Ahora enviamos FormData
+  });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    return toast("error", data.error || "No se pudo poner en espera");
+  }
+  cerrarModalTecnico();
+  await sincronizarConServidor();
+  toast("success", "Atencion puesta en espera");
 }
 
-function cerrarModalTecnico() { document.getElementById('modal-ticket-tecnico').classList.remove('active'); }
+async function cargarEvidencias(ticket, contenedor) {
+  const evidencias = await fetch(`/api/tickets/${ticket.id_ticket}/evidencias`).then(r => r.ok ? r.json() : []).catch(() => []);
+  const archivos = evidencias.length ? evidencias.map(e => e.ruta_archivo) : (ticket.archivo ? [ticket.archivo] : []);
+  detail.renderCarousel(contenedor, archivos, "No hay evidencia.");
+}
+
+async function cargarSoluciones(ticketId, contenedor) {
+  const soluciones = await fetch(`/api/tickets/${ticketId}/soluciones`).then(r => r.ok ? r.json() : []).catch(() => []);
+  detail.renderSolutions(contenedor, soluciones, "Observaciones registradas");
+}
+
+async function cargarAsignaciones(ticketId, contenedor) {
+  const asignaciones = await fetch(`/api/tickets/${ticketId}/asignaciones`).then(r => r.ok ? r.json() : []).catch(() => []);
+  detail.renderAssignments(contenedor, asignaciones, "Estado de asignaciones");
+}
+
+window.verDetalleTicketTecnico = async function (idTicket) {
+  const ticket = ticketsGlobales.find(t => t.id_ticket === idTicket);
+  if (!ticket) return;
+
+  $("m-id-ticket").innerText = `Detalle: #${ticket.id_ticket}`;
+  $("m-descripcion-ticket").innerText = ticket.descripcion || "Sin descripción";
+  await cargarEvidencias(ticket, $("m-evidencia-contenedor"));
+  await cargarAsignaciones(ticket.id_ticket, $("m-asignaciones-contenedor"));
+  await cargarSoluciones(ticket.id_ticket, $("m-soluciones-contenedor"));
+  const footer = $("modal-ticket-tecnico-footer");
+  footer.querySelectorAll(".btn-resuelto, .btn-espera").forEach(b => b.remove());
+  const estadoAsignacion = (ticket.estado_asignacion || "").toLowerCase().trim();
+  if (["en proceso", "en espera"].includes(estadoAsignacion)) {
+    const btnEspera = document.createElement("button");
+    btnEspera.innerText = "Poner en espera";
+    btnEspera.className = "btn-espera btn-cancelar";
+    btnEspera.onclick = () => ponerEnEspera(ticket.id_ticket);
+    if (estadoAsignacion !== "en espera") footer.insertBefore(btnEspera, $("btn-cerrar-modal-tecnico-footer"));
+
+    const btnResuelto = document.createElement("button");
+    btnResuelto.innerText = "Registrar solución";
+    btnResuelto.className = "btn-resuelto btn-enviar";
+    btnResuelto.onclick = () => marcarComoResuelto(ticket.id_ticket);
+    footer.insertBefore(btnResuelto, $("btn-cerrar-modal-tecnico-footer"));
+  }
+  $("modal-ticket-tecnico").classList.add("active");
+};
+
+function cerrarModalTecnico() {
+  $("modal-ticket-tecnico")?.classList.remove("active");
+}
 
 function mostrarDashboard() {
-    document.getElementById('sec-dashboard')?.classList.remove('hidden');
-    document.getElementById('sec-disponibles')?.classList.add('hidden');
-    document.getElementById('nav-dashboard')?.classList.add('active');
-    document.getElementById('nav-disponibles')?.classList.remove('active');
+  $("sec-dashboard")?.classList.remove("hidden");
+  $("sec-disponibles")?.classList.add("hidden");
+  $("nav-dashboard")?.classList.add("active");
+  $("nav-disponibles")?.classList.remove("active");
 }
 
 function mostrarDisponibles() {
-    document.getElementById('sec-dashboard')?.classList.add('hidden');
-    document.getElementById('sec-disponibles')?.classList.remove('hidden');
-    document.getElementById('nav-dashboard')?.classList.remove('active');
-    document.getElementById('nav-disponibles')?.classList.add('active');
+  $("sec-dashboard")?.classList.add("hidden");
+  $("sec-disponibles")?.classList.remove("hidden");
+  $("nav-dashboard")?.classList.remove("active");
+  $("nav-disponibles")?.classList.add("active");
 }
+
+window.aceptarTicket = aceptarTicket;
+window.renderizarTablasDashboard = renderizarTablasDashboard;

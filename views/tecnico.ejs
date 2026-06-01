@@ -6,14 +6,14 @@
   <title>Panel del Técnico - ServiHelp</title>
   <link rel="stylesheet" href="/style.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 </head>
 <body>
 
 <div class="container">
 
   <aside class="sidebar">
-    <h2 class="logo">⚡ ServiHelp</h2>
-
+    <h2 class="logo"><i class="fa-solid fa-bolt"></i> ServiHelp</h2>
     <nav>
       <a id="nav-dashboard" class="active">
         <i class="fa-solid fa-chart-line"></i>
@@ -36,35 +36,51 @@
           <span class="role" id="rolTecnico">Técnico</span>
         </div>
       </div>
+      <button class="btn-logout" id="logout-btn">
+        <i class="fa-solid fa-right-from-bracket"></i>
+        Salir
+      </button>
     </div>
-
-    <button class="btn-logout" id="logout-btn">
-      <i class="fa-solid fa-right-from-bracket"></i>
-      Salir
-    </button>
   </aside>
 
   <main class="main">
+    <div class="notif-shell">
+      <button type="button" id="notif-toggle" class="notif-bell" title="Notificaciones">
+        <i class="fa-solid fa-bell"></i>
+        <span id="notif-count" class="notif-count hidden">0</span>
+      </button>
+      <div id="notif-dropdown" class="notif-dropdown hidden">
+        <div class="notif-dropdown-head">Notificaciones</div>
+        <div id="notif-list" class="notif-list"></div>
+      </div>
+    </div>
 
     <section id="sec-dashboard">
       <div>
         <h1>Panel General de Soporte</h1>
       </div>
-
-      <div class="cards">
-        <div class="card c-pend">
-          <p>Asignados</p>
-          <h2 id="kpiAsignados">0</h2>
-        </div>
-        <div class="card c-proc">
-          <p>En Proceso</p>
-          <h2 id="kpiProceso">0</h2>
-        </div>
-        <div class="card c-resuel">
-          <p>Resueltos</p>
-          <h2 id="kpiResueltos">0</h2>
-        </div>
-      </div>
+    <div class="cards">
+    <div class="card c-pend">
+        <p>Asignados</p>
+        <h2 id="kpiAsignados">0</h2>
+    </div>
+    <div class="card c-proc">
+        <p>En Proceso</p>
+        <h2 id="kpiProceso">0</h2>
+    </div>
+        <div class="card c-esp">
+        <p>En espera</p>
+        <h2 id="kpiEspera">0</h2>
+    </div>
+    <div class="card c-resuel">
+        <p>Resueltos</p>
+        <h2 id="kpiResueltos">0</h2>
+    </div>
+    <div class="card c-cerr">
+        <p>Cerrados</p>
+        <h2 id="kpiCerrados">0</h2>
+    </div>
+</div>
 
       <div class="tabla-container custom-table-margin">
         <div class="tabla-header">
@@ -92,6 +108,8 @@
 
   <select id="filtroPrioridad" class="search-input select-estado-width" onchange="renderizarTablasDashboard()">
     <option value="Todos">Todas las prioridades</option>
+    <option value="Sin evaluar">Sin evaluar</option>
+    <option value="Critica">Crítica</option>
     <option value="Baja">Baja</option>
     <option value="Media">Media</option>
     <option value="Alta">Alta</option>
@@ -126,6 +144,8 @@
           <div class="filter-badge-box">
             <select id="filtro-prioridad-disponibles" class="select-estado-width custom-select-dark">
               <option value="todos">Todas las prioridades</option>
+              <option value="sin evaluar">Sin evaluar</option>
+              <option value="critica">Crítica</option>
               <option value="alta">Alta</option>
               <option value="media">Media</option>
               <option value="baja">Baja</option>
@@ -143,17 +163,16 @@
 
 <div id="modal-ticket-tecnico" class="modal">
   <div class="modal-content">
-    <h3 id="m-id-ticket">Detalle del Ticket</h3>
+    <h3 id="m-id-ticket" class="modal-title-purple">Detalle del Ticket</h3>
     <hr class="modal-divider">
-    
-    <div class="input-group">
-      <label><strong>Descripción del Reporte:</strong></label>
+    <div class="modal-body">
+      <p><strong>Descripción:</strong></p>
       <p id="m-descripcion-ticket" class="faq-respuesta-contenido"></p>
-    </div>
 
-    <div class="input-group">
-      <label><strong>Evidencia Adjunta:</strong></label>
+      <p><strong>Evidencia del reporte:</strong></p>
       <div id="m-evidencia-contenedor"></div>
+      <div id="m-asignaciones-contenedor"></div>
+      <div id="m-soluciones-contenedor"></div>
     </div>
 
     <div class="acciones modal-footer-line" id="modal-ticket-tecnico-footer">
@@ -166,6 +185,7 @@
     window.currentUserId = "<%= user.id %>"; 
     window.currentUserSessionName = "<%= user.username %>";
 </script>
+<script src="/ticket-detail.js"></script>
 <script src="/tecnico-app.js"></script>
 </body>
 </html>
